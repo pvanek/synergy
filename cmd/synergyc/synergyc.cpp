@@ -31,7 +31,9 @@
 #include "LogOutputters.h"
 #include "CArch.h"
 #include "XArch.h"
+
 #include <cstring>
+#include <iostream>
 
 #define DAEMON_RUNNING(running_)
 #if WINAPI_MSWINDOWS
@@ -40,6 +42,7 @@
 #include "CMSWindowsUtil.h"
 #include "CMSWindowsClientTaskBarReceiver.h"
 #include "resource.h"
+#include <conio.h>
 #undef DAEMON_RUNNING
 #define DAEMON_RUNNING(running_) CArchMiscWindows::daemonRunning(running_)
 #elif WINAPI_XWINDOWS
@@ -262,15 +265,16 @@ handleClientFailed(const CEvent& e, void*)
 
 	updateStatus(CString("Failed to connect to server: ") + info->m_what);
 	if (!ARG->m_restartable || !info->m_retry) {
-		LOG((CLOG_ERR "failed to connect to server: %s", info->m_what));
+		LOG((CLOG_ERR "failed to connect to server: %s", info->m_what.c_str()));
 		EVENTQUEUE->addEvent(CEvent(CEvent::kQuit));
 	}
 	else {
-		LOG((CLOG_WARN "failed to connect to server: %s", info->m_what));
+		LOG((CLOG_WARN "failed to connect to server: %s", info->m_what.c_str()));
 		if (!s_suspened) {
 			scheduleClientRestart(nextRestartTimeout());
 		}
 	}
+	delete info;
 }
 
 static
@@ -291,17 +295,30 @@ static
 CClient*
 openClient(const CString& name, const CNetworkAddress& address, CScreen* screen)
 {
-	CClient* client = new CClient(name, address,
-						new CTCPSocketFactory, NULL, screen);
-	EVENTQUEUE->adoptHandler(CClient::getConnectedEvent(),
-						client->getEventTarget(),
-						new CFunctionEventJob(handleClientConnected));
-	EVENTQUEUE->adoptHandler(CClient::getConnectionFailedEvent(),
-						client->getEventTarget(),
-						new CFunctionEventJob(handleClientFailed));
-	EVENTQUEUE->adoptHandler(CClient::getDisconnectedEvent(),
-						client->getEventTarget(),
-						new CFunctionEventJob(handleClientDisconnected));
+	CClient* client = new CClient(
+		name, address, new CTCPSocketFactory, NULL, screen);
+
+	try {
+		EVENTQUEUE->adoptHandler(
+			CClient::getConnectedEvent(),
+			client->getEventTarget(),
+			new CFunctionEventJob(handleClientConnected));
+
+		EVENTQUEUE->adoptHandler(
+			CClient::getConnectionFailedEvent(),
+			client->getEventTarget(),
+			new CFunctionEventJob(handleClientFailed));
+
+		EVENTQUEUE->adoptHandler(
+			CClient::getDisconnectedEvent(),
+			client->getEventTarget(),
+			new CFunctionEventJob(handleClientDisconnected));
+
+	} catch (std::bad_alloc &ba) {
+		delete client;
+		throw ba;
+	}
+
 	return client;
 }
 
@@ -476,21 +493,19 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 	}
 
 	// save log messages
-	CBufferedLogOutputter logBuffer(1000);
-	CLOG->insert(&logBuffer, true);
+	// use heap memory because CLog deletes outputters on destruction
+	CBufferedLogOutputter* logBuffer = new CBufferedLogOutputter(1000);
+	CLOG->insert(logBuffer, true);
 
 	// make the task bar receiver.  the user can control this app
 	// through the task bar.
-	s_taskBarReceiver = createTaskBarReceiver(&logBuffer);
+	s_taskBarReceiver = createTaskBarReceiver(logBuffer);
 
 	// run
 	int result = startup(argc, argv);
 
 	// done with task bar receiver
 	delete s_taskBarReceiver;
-
-	// done with log buffer
-	CLOG->remove(&logBuffer);
 
 	delete ARG->m_serverAddress;
 	return result;
@@ -503,7 +518,28 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 
 #define BYE "\nTry `%s --help' for more information."
 
-static void				(*bye)(int) = &exit;
+#if SYSAPI_WIN32
+static
+void 
+exitPause(int code) 
+{
+	CString name;
+	CArchMiscWindows::getParentProcessName(name);
+
+	// if the user did not launch from the command prompt (i.e. it was launched
+	// by double clicking, or through a debugger), allow user to read any error
+	// messages (instead of the window closing automatically).
+	if (name != "cmd.exe") {
+		std::cout << std::endl << "Press any key to exit...";
+		int c = _getch();
+	}
+
+	exit(code);
+}
+static void	(*bye)(int) = &exitPause;
+#else
+static void	(*bye)(int) = &exit;
+#endif
 
 static
 void
@@ -531,45 +567,49 @@ help()
 #  define USAGE_DISPLAY_INFO
 #endif
 
-	LOG((CLOG_PRINT
-"Usage: %s"
-" [--daemon|--no-daemon]"
-" [--debug <level>]"
-USAGE_DISPLAY_ARG
-" [--name <screen-name>]"
-" [--yscroll <delta>]"
-" [--restart|--no-restart]"
-" <server-address>"
-"\n\n"
-"Start the synergy mouse/keyboard sharing server.\n"
-"\n"
-"  -d, --debug <level>      filter out log messages with priorty below level.\n"
-"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
-"                           DEBUG, DEBUG1, DEBUG2.\n"
-USAGE_DISPLAY_INFO
-"  -f, --no-daemon          run the client in the foreground.\n"
-"*     --daemon             run the client as a daemon.\n"
-"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
-"                           ourself to the server.\n"
-"      --yscroll <delta>    defines the vertical scrolling delta, which is\n"
-"                           120 by default.\n"
-"  -1, --no-restart         do not try to restart the client if it fails for\n"
-"                           some reason.\n"
-"*     --restart            restart the client automatically if it fails.\n"
-"  -l  --log <file>         write log messages to file.\n"
-"  -h, --help               display this help and exit.\n"
-"      --version            display version information and exit.\n"
-"\n"
-"* marks defaults.\n"
-"\n"
-"The server address is of the form: [<hostname>][:<port>].  The hostname\n"
-"must be the address or hostname of the server.  The port overrides the\n"
-"default port, %d.\n"
-"\n"
-"Where log messages go depends on the platform and whether or not the\n"
-"client is running as a daemon.",
-								ARG->m_pname, kDefaultPort));
-
+	char buffer[2000];
+	sprintf(
+		buffer,
+		"Usage: %s"
+		" [--daemon|--no-daemon]"
+		" [--debug <level>]"
+		USAGE_DISPLAY_ARG
+		" [--name <screen-name>]"
+		" [--yscroll <delta>]"
+		" [--restart|--no-restart]"
+		" <server-address>"
+		"\n\n"
+		"Start the synergy mouse/keyboard sharing server.\n"
+		"\n"
+		"  -d, --debug <level>      filter out log messages with priorty below level.\n"
+		"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
+		"                           DEBUG, DEBUG1, DEBUG2.\n"
+		USAGE_DISPLAY_INFO
+		"  -f, --no-daemon          run the client in the foreground.\n"
+		"*     --daemon             run the client as a daemon.\n"
+		"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
+		"                           ourself to the server.\n"
+		"      --yscroll <delta>    defines the vertical scrolling delta, which is\n"
+		"                           120 by default.\n"
+		"  -1, --no-restart         do not try to restart the client if it fails for\n"
+		"                           some reason.\n"
+		"*     --restart            restart the client automatically if it fails.\n"
+		"  -l  --log <file>         write log messages to file.\n"
+		"  -h, --help               display this help and exit.\n"
+		"      --version            display version information and exit.\n"
+		"\n"
+		"* marks defaults.\n"
+		"\n"
+		"The server address is of the form: [<hostname>][:<port>].  The hostname\n"
+		"must be the address or hostname of the server.  The port overrides the\n"
+		"default port, %d.\n"
+		"\n"
+		"Where log messages go depends on the platform and whether or not the\n"
+		"client is running as a daemon.",
+		ARG->m_pname, kDefaultPort
+	);
+	
+	std::cout << buffer << std::endl;
 }
 
 static
@@ -597,13 +637,11 @@ static
 void
 parse(int argc, const char* const* argv)
 {
-	assert(ARG->m_pname != NULL);
-	assert(argv         != NULL);
-	assert(argc         >= 1);
+	bool argsValid = (ARG->m_pname != NULL) && (argv != NULL) && (argc >= 1);
+	assert(argsValid);
 
-	if(ARG->m_pname == NULL 
-		|| argv == NULL
-		|| argc < 1) {
+	if (!argsValid) {
+		// fail silently for release (avoids compiler warning)
 		return;
 	}
 
@@ -759,6 +797,14 @@ parse(int argc, const char* const* argv)
 	LOG((CLOG_WARN "This is an experimental x64 build of %s. Use it at your own risk.", kApplication));
 #endif
 #endif
+
+	if (CLOG->getFilter() > CLog::kDEBUG) {
+		if (ARG->m_logFile == NULL) {
+			LOG((CLOG_WARN "verbose debug messages will not be sent to the console (use file logging)"));
+		} else {
+			LOG((CLOG_INFO "verbose debug messages will be sent to file: %s", ARG->m_logFile));
+		}
+	}
 }
 
 
@@ -785,7 +831,6 @@ public:
 	virtual void		close() { }
 	virtual void		show(bool) { }
 	virtual bool		write(ELevel level, const char* message);
-	virtual const char*	getNewline() const { return ""; }
 };
 
 bool
@@ -855,6 +900,15 @@ showError(HINSTANCE instance, const char* title, UINT id, const char* arg)
 	MessageBox(NULL, msg.c_str(), title, MB_OK | MB_ICONWARNING);
 }
 
+int main(int argc, char** argv) {
+	HINSTANCE instance = GetModuleHandle(NULL);
+	if (instance) {
+		return WinMain(instance, NULL, GetCommandLine(), SW_SHOWNORMAL);
+	} else {
+		return 1;
+	}
+}
+
 int WINAPI
 WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 {
@@ -873,33 +927,30 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 		CThread::getCurrentThread().setPriority(-14);
 		CArgs args;
 
-		// set title on log window
-		ARCH->openConsole((CString(kAppVersion) + " " + "Client").c_str());
-
-		// windows NT family starts services using no command line options.
-		// since i'm not sure how to tell the difference between that and
-		// a user providing no options we'll assume that if there are no
-		// arguments and we're on NT then we're being invoked as a service.
-		// users on NT can use `--daemon' or `--no-daemon' to force us out
-		// of the service code path.
-		StartupFunc startup = &standardStartup;
+		StartupFunc startup;
 		if (!CArchMiscWindows::isWindows95Family()) {
-			if (__argc <= 1) {
+
+			// WARNING: this may break backwards computability!
+			// previously, we were assuming that the process is launched from the
+			// service host when no arguments were passed. if we wanted to launch
+			// from console or debugger, we had to remember to pass -f which was
+			// always the first pitfall for new comitters. now, we are able to
+			// check using the new `wasLaunchedAsService` function, which is a
+			// more elegant solution.
+			if (CArchMiscWindows::wasLaunchedAsService()) {
 				startup = &daemonNTStartup;
-			}
-			else {
+			} else {
 				startup = &foregroundStartup;
+				ARG->m_daemon = false;
 			}
+		} else {
+			startup = &standardStartup;
 		}
 
-		// send PRINT and FATAL output to a message box
-		int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
-
-		// let user examine any messages if we're running as a backend
-		// by putting up a dialog box before exiting.
-		if (args.m_backend && s_hasImportantLogMessages) {
-			showError(instance, args.m_pname, IDS_FAILED, "");
-		}
+		// previously we'd send PRINT and FATAL output to a message box, but now
+		// that we're using an MS console window for Windows, there's no need really
+		//int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
+		int result = run(__argc, __argv, NULL, startup);
 
 		delete CLOG;
 		return result;
@@ -912,8 +963,7 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 		showError(instance, __argv[0], IDS_INIT_FAILED, e.what().c_str());
 	}
 	catch (...) {
-		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown>");
-		//throw;
+		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown exception>");
 	}
 	return kExitFailed;
 }

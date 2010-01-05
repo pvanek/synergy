@@ -12,18 +12,13 @@
  * GNU General Public License for more details.
  */
 
-#pragma once
-
 #include "CArchConsoleStd.h"
+#include <iostream>
 
-#define ARCH_CONSOLE CArchConsoleWindows
-
-class CArchConsoleWindows : public CArchConsoleStd {
-public:
-	CArchConsoleWindows(void*);
-	virtual ~CArchConsoleWindows();
-	virtual void openConsoleDelayed();
-	virtual void writeConsole(const char*);
-private:
-	bool m_consoleOpen;
-};
+void
+CArchConsoleStd::writeConsole(const char* str)
+{
+	// TODO: we need to use cerr also somehow
+	std::cout << str << std::endl;
+	std::cout.flush();
+}

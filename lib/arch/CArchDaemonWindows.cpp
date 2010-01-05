@@ -142,9 +142,12 @@ CArchDaemonWindows::installDaemon(const char* name,
 				throw XArchDaemonInstallFailed(new XArchEvalWindows(err));
 			}
 		}
+		else {
+			// done with service (but only try to close if not null)
+			CloseServiceHandle(service);
+		}
 
-		// done with service and manager
-		CloseServiceHandle(service);
+		// done with manager
 		CloseServiceHandle(mgr);
 
 		// open the registry key for this service
@@ -608,7 +611,7 @@ CArchDaemonWindows::serviceMain(DWORD argc, LPTSTR* argvIn)
 		return;
 	}
 
-	// tell service control manager that we're starting
+	// tell e manager that we're starting
 	m_serviceState = SERVICE_START_PENDING;
 	setStatus(m_serviceState, 0, 10000);
 

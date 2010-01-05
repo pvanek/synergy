@@ -33,8 +33,12 @@
 #include "LogOutputters.h"
 #include "CArch.h"
 #include "XArch.h"
+#include "CArchConsoleStd.h"
 #include "stdfstream.h"
+
 #include <cstring>
+#include <iostream>
+#include <sstream>
 
 #define DAEMON_RUNNING(running_)
 #if WINAPI_MSWINDOWS
@@ -43,6 +47,8 @@
 #include "CMSWindowsUtil.h"
 #include "CMSWindowsServerTaskBarReceiver.h"
 #include "resource.h"
+#include <conio.h>
+#include "CArchDaemonWindows.h"
 #undef DAEMON_RUNNING
 #define DAEMON_RUNNING(running_) CArchMiscWindows::daemonRunning(running_)
 #elif WINAPI_XWINDOWS
@@ -56,6 +62,7 @@
 // platform dependent name of a daemon
 #if SYSAPI_WIN32
 #define DAEMON_NAME "Synergy+ Server"
+#define DAEMON_INFO "Shares this computers mouse and keyboard with other computers."
 #elif SYSAPI_UNIX
 #define DAEMON_NAME "synergys"
 #endif
@@ -92,7 +99,9 @@ public:
 		m_logFile(NULL),
 		m_display(NULL),
 		m_synergyAddress(NULL),
-		m_config(NULL)
+		m_config(NULL),
+		m_installService(false),
+		m_uninstallService(false)
 		{ s_instance = this; }
 	~CArgs() { s_instance = NULL; }
 
@@ -109,6 +118,8 @@ public:
 	CString 			m_name;
 	CNetworkAddress*	m_synergyAddress;
 	CConfig*			m_config;
+	bool				m_installService;
+	bool				m_uninstallService;
 };
 
 CArgs*					CArgs::s_instance = NULL;
@@ -318,8 +329,17 @@ CServer*
 openServer(const CConfig& config, CPrimaryClient* primaryClient)
 {
 	CServer* server = new CServer(config, primaryClient);
-	EVENTQUEUE->adoptHandler(CServer::getDisconnectedEvent(), server,
-						new CFunctionEventJob(handleNoClients));
+	
+	try {
+		EVENTQUEUE->adoptHandler(
+			CServer::getDisconnectedEvent(), server,
+			new CFunctionEventJob(handleNoClients));
+
+	} catch (std::bad_alloc &ba) {
+		delete server;
+		throw ba;
+	}
+	
 	return server;
 }
 
@@ -744,6 +764,7 @@ mainLoop()
 	return kExitSuccess;
 }
 
+// used by windows nt (service mode)
 static
 int
 daemonMainLoop(int, const char**)
@@ -756,6 +777,7 @@ daemonMainLoop(int, const char**)
 	return mainLoop();
 }
 
+// used by unix and win95
 static
 int
 standardStartup(int argc, char** argv)
@@ -791,21 +813,19 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 	}
 
 	// save log messages
-	CBufferedLogOutputter logBuffer(1000);
-	CLOG->insert(&logBuffer, true);
+	// use heap memory because CLog deletes outputters on destruction
+	CBufferedLogOutputter* logBuffer = new CBufferedLogOutputter(1000);
+	CLOG->insert(logBuffer, true);
 
 	// make the task bar receiver.  the user can control this app
 	// through the task bar.
-	s_taskBarReceiver = createTaskBarReceiver(&logBuffer);
+	s_taskBarReceiver = createTaskBarReceiver(logBuffer);
 
 	// run
 	int result = startup(argc, argv);
 
 	// done with task bar receiver
 	delete s_taskBarReceiver;
-
-	// done with log buffer
-	CLOG->remove(&logBuffer);
 
 	delete ARG->m_config;
 	delete ARG->m_synergyAddress;
@@ -819,7 +839,28 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 
 #define BYE "\nTry `%s --help' for more information."
 
-static void				(*bye)(int) = &exit;
+#if SYSAPI_WIN32
+static
+void 
+exitPause(int code) 
+{
+	CString name;
+	CArchMiscWindows::getParentProcessName(name);
+
+	// if the user did not launch from the command prompt (i.e. it was launched
+	// by double clicking, or through a debugger), allow user to read any error
+	// messages (instead of the window closing automatically).
+	if (name != "cmd.exe") {
+		std::cout << std::endl << "Press any key to exit...";
+		int c = _getch();
+	}
+
+	exit(code);
+}
+static void	(*bye)(int) = &exitPause;
+#else
+static void	(*bye)(int) = &exit;
+#endif
 
 static
 void
@@ -868,61 +909,61 @@ help()
 
 #endif
 
-	LOG((CLOG_PRINT
-"Usage: %s"
-" [--address <address>]"
-" [--config <pathname>]"
-" [--debug <level>]"
-USAGE_DISPLAY_ARG
-" [--name <screen-name>]"
-" [--restart|--no-restart]"
-PLATFORM_ARGS
-"\n\n"
-"Start the synergy mouse/keyboard sharing server.\n"
-"\n"
-"  -a, --address <address>  listen for clients on the given address.\n"
-"  -c, --config <pathname>  use the named configuration file instead.\n"
-"  -d, --debug <level>      filter out log messages with priorty below level.\n"
-"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
-"                           DEBUG, DEBUG1, DEBUG2.\n"
-USAGE_DISPLAY_INFO
-"  -f, --no-daemon          run the server in the foreground.\n"
-"*     --daemon             run the server as a daemon.\n"
-"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
-"                           this screen in the configuration.\n"
-"  -1, --no-restart         do not try to restart the server if it fails for\n"
-"                           some reason.\n"
-"*     --restart            restart the server automatically if it fails.\n"
-"  -l  --log <file>         write log messages to file.\n"
-PLATFORM_DESC
-"  -h, --help               display this help and exit.\n"
-"      --version            display version information and exit.\n"
-"\n"
-"* marks defaults.\n"
-"\n"
-PLATFORM_EXTRA
-"The argument for --address is of the form: [<hostname>][:<port>].  The\n"
-"hostname must be the address or hostname of an interface on the system.\n"
-"The default is to listen on all interfaces.  The port overrides the\n"
-"default port, %d.\n"
-"\n"
-"If no configuration file pathname is provided then the first of the\n"
-"following to load successfully sets the configuration:\n"
-"  %s\n"
-"  %s\n"
-"If no configuration file can be loaded then the configuration uses its\n"
-"defaults with just the server screen.\n"
-"\n"
-"Where log messages go depends on the platform and whether or not the\n"
-"server is running as a daemon.",
-								ARG->m_pname,
-								kDefaultPort,
-								ARCH->concatPath(
-									ARCH->getUserDirectory(),
-									USR_CONFIG_NAME).c_str(),
-								ARCH->concatPath(
-									ARCH->getSystemDirectory(),
-									SYS_CONFIG_NAME).c_str()));
+	char buffer[2000];
+	sprintf(
+		buffer,
+		"Usage: %s"
+		" [--address <address>]"
+		" [--config <pathname>]"
+		" [--debug <level>]"
+		USAGE_DISPLAY_ARG
+		" [--name <screen-name>]"
+		" [--restart|--no-restart]"
+		PLATFORM_ARGS
+		"\n\n"
+		"Start the synergy mouse/keyboard sharing server.\n"
+		"\n"
+		"  -a, --address <address>  listen for clients on the given address.\n"
+		"  -c, --config <pathname>  use the named configuration file instead.\n"
+		"  -d, --debug <level>      filter out log messages with priorty below level.\n"
+		"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
+		"                           DEBUG, DEBUG1, DEBUG2.\n"
+		USAGE_DISPLAY_INFO
+		"  -f, --no-daemon          run the server in the foreground.\n"
+		"*     --daemon             run the server as a daemon.\n"
+		"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
+		"                           this screen in the configuration.\n"
+		"  -1, --no-restart         do not try to restart the server if it fails for\n"
+		"                           some reason.\n"
+		"*     --restart            restart the server automatically if it fails.\n"
+		"  -l  --log <file>         write log messages to file.\n"
+		PLATFORM_DESC
+		"  -h, --help               display this help and exit.\n"
+		"      --version            display version information and exit.\n"
+		"\n"
+		"* marks defaults.\n"
+		"\n"
+		PLATFORM_EXTRA
+		"The argument for --address is of the form: [<hostname>][:<port>].  The\n"
+		"hostname must be the address or hostname of an interface on the system.\n"
+		"The default is to listen on all interfaces.  The port overrides the\n"
+		"default port, %d.\n"
+		"\n"
+		"If no configuration file pathname is provided then the first of the\n"
+		"following to load successfully sets the configuration:\n"
+		"  %s\n"
+		"  %s\n"
+		"If no configuration file can be loaded then the configuration uses its\n"
+		"defaults with just the server screen.\n"
+		"\n"
+		"Where log messages go depends on the platform and whether or not the\n"
+		"server is running as a daemon.",
+		ARG->m_pname, kDefaultPort,
+		ARCH->concatPath(ARCH->getUserDirectory(), USR_CONFIG_NAME).c_str(),
+		ARCH->concatPath(ARCH->getSystemDirectory(), SYS_CONFIG_NAME).c_str()
+	);
+
+	std::cout << buffer << std::endl;
 }
 
 static
@@ -950,9 +991,14 @@ static
 void
 parse(int argc, const char* const* argv)
 {
-	assert(ARG->m_pname != NULL);
-	assert(argv       != NULL);
-	assert(argc       >= 1);
+	bool argsValid = (ARG->m_pname != NULL) && (argv != NULL) && (argc >= 1);
+	assert(argsValid);
+
+	if (!argsValid) {
+		// fail silently for release (avoids compiler warning)
+		help();
+		bye(kExitSuccess);
+	}
 
 	// set defaults
 	ARG->m_name = ARCH->getHostName();
@@ -1035,6 +1081,18 @@ parse(int argc, const char* const* argv)
 			bye(kExitSuccess);
 		}
 
+#if WINAPI_MSWINDOWS
+		else if (isArg(i, argc, argv, NULL, "--install-service")) {
+			// install windows service
+			ARG->m_installService = true;
+		}
+
+		else if (isArg(i, argc, argv, NULL, "--uninstall-service")) {
+			// uninstall windows service
+			ARG->m_uninstallService = true;
+		}
+#endif
+
 		else if (isArg(i, argc, argv, "--", NULL)) {
 			// remaining arguments are not options
 			++i;
@@ -1091,6 +1149,14 @@ parse(int argc, const char* const* argv)
 	LOG((CLOG_WARN "This is an experimental x64 build of %s. Use it at your own risk.", kApplication));
 #endif
 #endif
+
+	if (CLOG->getFilter() > CLog::kDEBUG) {
+		if (ARG->m_logFile == NULL) {
+			LOG((CLOG_WARN "verbose debug messages will not be sent to the console (use file logging)"));
+		} else {
+			LOG((CLOG_INFO "verbose debug messages will be sent to file: %s", ARG->m_logFile));
+		}
+	}
 }
 
 static
@@ -1173,6 +1239,7 @@ loadConfig()
 #if SYSAPI_WIN32
 
 static bool				s_hasImportantLogMessages = false;
+static HINSTANCE s_instance = NULL;
 
 //
 // CMessageBoxOutputter
@@ -1190,7 +1257,6 @@ public:
 	virtual void		close() { }
 	virtual void		show(bool) { }
 	virtual bool		write(ELevel level, const char* message);
-	virtual const char*	getNewline() const { return ""; }
 };
 
 bool
@@ -1241,11 +1307,48 @@ daemonNTStartup(int, char**)
 
 static
 int
+manageService() 
+{
+	assert(ARG->m_installService || ARG->m_uninstallService);
+
+	std::stringstream argBuf;
+	for (int i = 1; i < __argc; i++) {
+		char* arg = __argv[i];
+
+		// ignore service setup args
+		if ((_stricmp(arg, "--install-service") != 0) &&
+			(_stricmp(arg, "--uninstall-service") != 0)) {
+
+			argBuf << " " << __argv[i];
+		}
+	}
+
+	char thisPath[MAX_PATH];
+	GetModuleFileName(s_instance, thisPath, MAX_PATH);
+
+	if (ARG->m_installService) {
+		ARCH->installDaemon(DAEMON_NAME, DAEMON_INFO, thisPath, argBuf.str().c_str(), NULL, true);
+		LOG((CLOG_INFO "service '%s' installed with args: %s", DAEMON_NAME, argBuf.str().c_str()));
+		return kExitSuccess;
+	} else if (ARG->m_uninstallService) {
+		ARCH->uninstallDaemon(DAEMON_NAME, true);
+		LOG((CLOG_INFO, "service '%s' uninstalled", DAEMON_NAME));
+		return kExitSuccess;
+	}
+	return kExitFailed;
+}
+
+// used by windows nt (foreground)
+static
+int
 foregroundStartup(int argc, char** argv)
 {
-
 	// parse command line
 	parse(argc, argv);
+
+	if (ARG->m_installService || ARG->m_uninstallService) {
+		return manageService();
+	}
 
 	// load configuration
 	loadConfig();
@@ -1261,6 +1364,15 @@ showError(HINSTANCE instance, const char* title, UINT id, const char* arg)
 	CString fmt = CMSWindowsUtil::getString(instance, id);
 	CString msg = CStringUtil::format(fmt.c_str(), arg);
 	MessageBox(NULL, msg.c_str(), title, MB_OK | MB_ICONWARNING);
+}
+
+int main(int argc, char** argv) {
+	s_instance = GetModuleHandle(NULL);
+	if (s_instance) {
+		return WinMain(s_instance, NULL, GetCommandLine(), SW_SHOWNORMAL);
+	} else {
+		return kExitFailed;
+	}
 }
 
 int WINAPI
@@ -1280,48 +1392,43 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 		CLOG;
 		CThread::getCurrentThread().setPriority(-14);
 		CArgs args;
-
-		// set title on log window
-		ARCH->openConsole((CString(kAppVersion) + " " + "Server").c_str());
-
-		// windows NT family starts services using no command line options.
-		// since i'm not sure how to tell the difference between that and
-		// a user providing no options we'll assume that if there are no
-		// arguments and we're on NT then we're being invoked as a service.
-		// users on NT can use `--daemon' or `--no-daemon' to force us out
-		// of the service code path.
-		StartupFunc startup = &standardStartup;
+		
+		StartupFunc startup;
 		if (!CArchMiscWindows::isWindows95Family()) {
-			if (__argc <= 1) {
+
+			// WARNING: this may break backwards computability!
+			// previously, we were assuming that the process is launched from the
+			// service host when no arguments were passed. if we wanted to launch
+			// from console or debugger, we had to remember to pass -f which was
+			// always the first pitfall for new comitters. now, we are able to
+			// check using the new `wasLaunchedAsService` function, which is a
+			// more elegant solution.
+			if (CArchMiscWindows::wasLaunchedAsService()) {
 				startup = &daemonNTStartup;
-			}
-			else {
+			} else {
 				startup = &foregroundStartup;
+				ARG->m_daemon = false;
 			}
+		} else {
+			startup = &standardStartup;
 		}
 
-		// send PRINT and FATAL output to a message box
-		int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
-
-		// let user examine any messages if we're running as a backend
-		// by putting up a dialog box before exiting.
-		if (args.m_backend && s_hasImportantLogMessages) {
-			showError(instance, args.m_pname, IDS_FAILED, "");
-		}
+		// previously we'd send PRINT and FATAL output to a message box, but now
+		// that we're using an MS console window for Windows, there's no need really
+		//int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
+		int result = run(__argc, __argv, NULL, startup);
 
 		delete CLOG;
 		return result;
 	}
 	catch (XBase& e) {
 		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, e.what());
-		//throw;
 	}
 	catch (XArch& e) {
 		showError(instance, __argv[0], IDS_INIT_FAILED, e.what().c_str());
 	}
 	catch (...) {
-		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown>");
-		//throw;
+		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown exception>");
 	}
 	return kExitFailed;
 }

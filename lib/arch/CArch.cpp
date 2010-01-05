@@ -14,6 +14,7 @@
 
 #include "common.h"
 #include "CArch.h"
+#include "CLog.h"
 
 #undef ARCH_CONSOLE
 #undef ARCH_DAEMON
@@ -180,12 +181,6 @@ void
 CArch::writeConsole(const char* str)
 {
 	m_console->writeConsole(str);
-}
-
-const char*
-CArch::getNewlineForConsole()
-{
-	return m_console->getNewlineForConsole();
 }
 
 void

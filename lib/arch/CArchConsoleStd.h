@@ -14,16 +14,17 @@
 
 #pragma once
 
-#include "CArchConsoleStd.h"
+#include "IArchConsole.h"
 
-#define ARCH_CONSOLE CArchConsoleWindows
-
-class CArchConsoleWindows : public CArchConsoleStd {
+//! Cross platform implementation of IArchConsole
+class CArchConsoleStd : public IArchConsole {
 public:
-	CArchConsoleWindows(void*);
-	virtual ~CArchConsoleWindows();
-	virtual void openConsoleDelayed();
-	virtual void writeConsole(const char*);
-private:
-	bool m_consoleOpen;
+	CArchConsoleStd() { }
+	virtual ~CArchConsoleStd() { }
+
+	// IArchConsole overrides
+	virtual void		openConsole(const char* title) { }
+	virtual void		closeConsole() { }
+	virtual void		showConsole(bool) { }
+	virtual void		writeConsole(const char*);
 };

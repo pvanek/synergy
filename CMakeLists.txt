@@ -44,8 +44,20 @@ INCLUDE(${cmake_dir}/CMakeLists_cpack.txt)
 IF(WIN32)
 	# add /analyze in order to unconver potential bugs in the source code
 	# Details: http://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
-	SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /analyze")
-	SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /analyze")
+	# add /FR to generate browse information (ncb files) usefull for using IDE
+
+	#define _BIND_TO_CURRENT_CRT_VERSION 1
+	#define _BIND_TO_CURRENT_ATL_VERSION 1
+	#define _BIND_TO_CURRENT_MFC_VERSION 1
+	#define _BIND_TO_CURRENT_OPENMP_VERSION 1
+	# next line replaced the previous 4 ones:
+	#define _BIND_TO_CURRENT_VCLIBS_VERSION 1;
+
+	# compiler: /MP - use multi cores to compile
+	# added _SECURE_SCL=1 for finding bugs with iterators - http://msdn.microsoft.com/en-us/library/aa985965.aspx
+
+	SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /analyze /FR /MP /D _BIND_TO_CURRENT_VCLIBS_VERSION=1 /D _SECURE_SCL=1")
+	SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /analyze /FR /MP /D _BIND_TO_CURRENT_VCLIBS_VERSION=1 /D _SECURE_SCL=1")
 
 ENDIF(WIN32)
 
