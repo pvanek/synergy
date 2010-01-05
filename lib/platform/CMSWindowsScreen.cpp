@@ -79,7 +79,6 @@ CMSWindowsScreen*		CMSWindowsScreen::s_screen   = NULL;
 
 CMSWindowsScreen::CMSWindowsScreen(bool isPrimary) :
 	m_isPrimary(isPrimary),
-	m_is95Family(CArchMiscWindows::isWindows95Family()),
 	m_isOnScreen(m_isPrimary),
 	m_class(0),
 	m_x(0), m_y(0),
@@ -491,7 +490,7 @@ void CMSWindowsScreen::saveMousePosition(SInt32 x, SInt32 y) {
 	m_xCursor = x;
 	m_yCursor = y;
 
-	LOG((CLOG_DEBUG2 "saved mouse position for next delta: %+d,%+d", x,y));
+	LOG((CLOG_DEBUG5 "saved mouse position for next delta: %+d,%+d", x,y));
 }
 
 UInt32
@@ -763,10 +762,23 @@ CMSWindowsScreen::createBlankCursor() const
 	// create a transparent cursor
 	int cw = GetSystemMetrics(SM_CXCURSOR);
 	int ch = GetSystemMetrics(SM_CYCURSOR);
+
 	UInt8* cursorAND = new UInt8[ch * ((cw + 31) >> 2)];
+	try {
+		memset(cursorAND, 0xff, ch * ((cw + 31) >> 2));
+	} catch(std::bad_alloc &ex) {
+		delete[] cursorAND;
+		throw ex;
+	}
+
 	UInt8* cursorXOR = new UInt8[ch * ((cw + 31) >> 2)];
-	memset(cursorAND, 0xff, ch * ((cw + 31) >> 2));
-	memset(cursorXOR, 0x00, ch * ((cw + 31) >> 2));
+	try {
+		memset(cursorXOR, 0x00, ch * ((cw + 31) >> 2));
+	} catch(std::bad_alloc &ex) {
+		delete[] cursorXOR;
+		throw ex;
+	}
+
 	HCURSOR c = CreateCursor(s_instance, 0, 0, cw, ch, cursorAND, cursorXOR);
 	delete[] cursorXOR;
 	delete[] cursorAND;
@@ -859,16 +871,20 @@ void
 CMSWindowsScreen::handleSystemEvent(const CEvent& event, void*)
 {
 	MSG* msg = reinterpret_cast<MSG*>(event.getData());
-	assert(msg != NULL);
+	assert(msg);
 
-	if (CArchMiscWindows::processDialog(msg)) {
-		return;
+	// check to avoid compile warning
+	if (msg) {
+
+		if (CArchMiscWindows::processDialog(msg)) {
+			return;
+		}
+		if (onPreDispatch(msg->hwnd, msg->message, msg->wParam, msg->lParam)) {
+			return;
+		}
+		TranslateMessage(msg);
+		DispatchMessage(msg);
 	}
-	if (onPreDispatch(msg->hwnd, msg->message, msg->wParam, msg->lParam)) {
-		return;
-	}
-	TranslateMessage(msg);
-	DispatchMessage(msg);
 }
 
 void
@@ -916,7 +932,7 @@ bool
 CMSWindowsScreen::onPreDispatchPrimary(HWND,
 				UINT message, WPARAM wParam, LPARAM lParam)
 {
-	LOG((CLOG_DEBUG2 "handling pre-dispatch primary"));
+	LOG((CLOG_DEBUG5 "handling pre-dispatch primary"));
 
 	// handle event
 	switch (message) {
@@ -975,21 +991,6 @@ CMSWindowsScreen::onEvent(HWND, UINT msg,
 				WPARAM wParam, LPARAM lParam, LRESULT* result)
 {
 	switch (msg) {
-	case WM_QUERYENDSESSION:
-		if (m_is95Family) {
-			*result = TRUE;
-			return true;
-		}
-		break;
-
-	case WM_ENDSESSION:
-		if (m_is95Family) {
-			if (wParam == TRUE && lParam == 0) {
-				EVENTQUEUE->addEvent(CEvent(CEvent::kQuit));
-			}
-			return true;
-		}
-		break;
 
 	case WM_DRAWCLIPBOARD:
 		// first pass on the message
@@ -1151,37 +1152,6 @@ CMSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
 		KeyID key = m_keyState->mapKeyFromEvent(wParam, lParam, &mask);
 		button    = static_cast<KeyButton>((lParam & 0x01ff0000u) >> 16);
 		if (key != kKeyNone) {
-			// fix key up.  if the key isn't down according to
-			// our table then we never got the key press event
-			// for it.  if it's not a modifier key then we'll
-			// synthesize the press first.  only do this on
-			// the windows 95 family, which eats certain special
-			// keys like alt+tab, ctrl+esc, etc.
-			if (m_is95Family && !wasDown && !down) {
-				switch (virtKey) {
-				case VK_SHIFT:
-				case VK_LSHIFT:
-				case VK_RSHIFT:
-				case VK_CONTROL:
-				case VK_LCONTROL:
-				case VK_RCONTROL:
-				case VK_MENU:
-				case VK_LMENU:
-				case VK_RMENU:
-				case VK_LWIN:
-				case VK_RWIN:
-				case VK_CAPITAL:
-				case VK_NUMLOCK:
-				case VK_SCROLL:
-					break;
-
-				default:
-					m_keyState->sendKeyEvent(getEventTarget(),
-							true, false, key, mask, 1, button);
-					break;
-				}
-			}
-
 			// do it
 			m_keyState->sendKeyEvent(getEventTarget(),
 							((lParam & 0x80000000u) == 0),
@@ -1298,8 +1268,8 @@ CMSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
 	SInt32 x = mx - m_xCursor;
 	SInt32 y = my - m_yCursor;
 
-	LOG((CLOG_DEBUG2
-		"handling mouse move; delta motion calc: %+d=(%+d - %+d),%+d=(%+d - %+d)",
+	LOG((CLOG_DEBUG3
+		"mouse move - motion delta: %+d=(%+d - %+d),%+d=(%+d - %+d)",
 		x, mx, m_xCursor, y, my, m_yCursor));
 
 	// ignore if the mouse didn't move or if message posted prior
@@ -1324,7 +1294,7 @@ CMSWindowsScreen::onMouseMove(SInt32 mx, SInt32 my)
 		// center on the server screen. if we don't do this, then the mouse 
 		// will always try to return to the original entry point on the 
 		// secondary screen.
-		LOG((CLOG_DEBUG2 "warping server cursor to center: %+d,%+d", m_xCenter, m_yCenter));
+		LOG((CLOG_DEBUG5 "warping server cursor to center: %+d,%+d", m_xCenter, m_yCenter));
 		warpCursorNoFlush(m_xCenter, m_yCenter);
 		
 		// examine the motion.  if it's about the distance
@@ -1574,15 +1544,6 @@ CMSWindowsScreen::fixClipboardViewer()
 void
 CMSWindowsScreen::enableSpecialKeys(bool enable) const
 {
-	// enable/disable ctrl+alt+del, alt+tab, etc on win95 family.
-	// since the win95 family doesn't support low-level hooks, we
-	// use this undocumented feature to suppress normal handling
-	// of certain key combinations.
-	if (m_is95Family) {
-		DWORD dummy = 0;
-		SystemParametersInfo(SPI_SETSCREENSAVERRUNNING,
-							enable ? FALSE : TRUE, &dummy, 0);
-	}
 }
 
 ButtonID

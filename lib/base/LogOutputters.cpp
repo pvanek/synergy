@@ -54,12 +54,6 @@ CStopLogOutputter::write(ELevel, const char*)
 	return false;
 }
 
-const char*
-CStopLogOutputter::getNewline() const
-{
-	return "";
-}
-
 
 //
 // CConsoleLogOutputter
@@ -94,16 +88,15 @@ CConsoleLogOutputter::show(bool showIfEmpty)
 }
 
 bool
-CConsoleLogOutputter::write(ELevel, const char* msg)
+CConsoleLogOutputter::write(ELevel level, const char* msg)
 {
-	ARCH->writeConsole(msg);
+	// we want to ignore messages above CLOG->getConsoleMaxLevel(), since
+	// the console can use a lot of CPU time to display messages, and on windows
+	// this is done on the same thread.
+	if (level <= CLOG->getConsoleMaxLevel()) {
+		ARCH->writeConsole(msg);
+	}
 	return true;
-}
-
-const char*
-CConsoleLogOutputter::getNewline() const
-{
-	return ARCH->getNewlineForConsole();
 }
 
 
@@ -169,13 +162,6 @@ CSystemLogOutputter::write(ELevel level, const char* msg)
 	ARCH->writeLog(archLogLevel, msg);
 	return true;
 }
-
-const char*
-CSystemLogOutputter::getNewline() const
-{
-	return "";
-}
-
 
 //
 // CSystemLogger
@@ -261,12 +247,6 @@ CBufferedLogOutputter::write(ELevel, const char* message)
 	return true;
 }
 
-const char*
-CBufferedLogOutputter::getNewline() const
-{
-	return "";
-}
-
 
 //
 // CFileLogOutputter
@@ -287,17 +267,11 @@ CFileLogOutputter::~CFileLogOutputter()
 		m_handle.close();
 }
 
-const char*
-CFileLogOutputter::getNewline() const
-{
-	return "\n";
-}
-
 bool
 CFileLogOutputter::write(ILogOutputter::ELevel level, const char *message)
 {
 	if (m_handle.is_open() && m_handle.fail() != true) {
-		m_handle << message;
+		m_handle << message << std::endl;
 		
 		// write buffer to file
 		m_handle.flush();

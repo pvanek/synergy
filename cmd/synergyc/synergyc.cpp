@@ -31,7 +31,9 @@
 #include "LogOutputters.h"
 #include "CArch.h"
 #include "XArch.h"
+
 #include <cstring>
+#include <iostream>
 
 #define DAEMON_RUNNING(running_)
 #if WINAPI_MSWINDOWS
@@ -40,65 +42,43 @@
 #include "CMSWindowsUtil.h"
 #include "CMSWindowsClientTaskBarReceiver.h"
 #include "resource.h"
+#include <conio.h>
+#include "CMSWindowsClientApp.h"
+#include "CMSWindowsAppUtil.h"
 #undef DAEMON_RUNNING
 #define DAEMON_RUNNING(running_) CArchMiscWindows::daemonRunning(running_)
 #elif WINAPI_XWINDOWS
 #include "CXWindowsScreen.h"
 #include "CXWindowsClientTaskBarReceiver.h"
+#include "CXWindowsClientApp.h"
+#include "CXWindowsAppUtil.h"
 #elif WINAPI_CARBON
 #include "COSXScreen.h"
 #include "COSXClientTaskBarReceiver.h"
+#include "COSXClientApp.h"
+#include "COSXAppUtil.h"
 #endif
 
 // platform dependent name of a daemon
 #if SYSAPI_WIN32
 #define DAEMON_NAME "Synergy+ Client"
+#define DAEMON_INFO "Allows another computer to share it's keyboard and mouse with this computer."
 #elif SYSAPI_UNIX
 #define DAEMON_NAME "synergyc"
 #endif
 
 typedef int (*StartupFunc)(int, char**);
 static bool startClient();
-static void parse(int argc, const char* const* argv);
 
-//
-// program arguments
-//
+#if WINAPI_MSWINDOWS
+CMSWindowsClientApp app;
+#elif WINAPI_XWINDOWS
+CXWindowsClientApp app;
+#elif WINAPI_CARBON
+COSXClientApp app;
+#endif
 
-#define ARG CArgs::s_instance
-
-class CArgs {
-public:
-	CArgs() :
-		m_pname(NULL),
-		m_backend(false),
-		m_restartable(true),
-		m_daemon(true),
-		m_yscroll(0),
-		m_logFilter(NULL),
-		m_display(NULL),
-		m_serverAddress(NULL),
-		m_logFile(NULL)
-		{ s_instance = this; }
-	  ~CArgs() { s_instance = NULL; }
-
-public:
-	static CArgs*		s_instance;
-	const char* 		m_pname;
-	bool				m_backend;
-	bool				m_restartable;
-	bool				m_daemon;
-	int 				m_yscroll;
-	const char* 		m_logFilter;
-	const char*			m_display;
-	CString 			m_name;
-	CNetworkAddress* 	m_serverAddress;
-	const char*			m_logFile;
-
-};
-
-CArgs*					CArgs::s_instance = NULL;
-
+#define ARG ((CClientApp::CArgs*)&app.args())
 
 //
 // platform dependent factories
@@ -262,15 +242,16 @@ handleClientFailed(const CEvent& e, void*)
 
 	updateStatus(CString("Failed to connect to server: ") + info->m_what);
 	if (!ARG->m_restartable || !info->m_retry) {
-		LOG((CLOG_ERR "failed to connect to server: %s", info->m_what));
+		LOG((CLOG_ERR "failed to connect to server: %s", info->m_what.c_str()));
 		EVENTQUEUE->addEvent(CEvent(CEvent::kQuit));
 	}
 	else {
-		LOG((CLOG_WARN "failed to connect to server: %s", info->m_what));
+		LOG((CLOG_WARN "failed to connect to server: %s", info->m_what.c_str()));
 		if (!s_suspened) {
 			scheduleClientRestart(nextRestartTimeout());
 		}
 	}
+	delete info;
 }
 
 static
@@ -291,17 +272,30 @@ static
 CClient*
 openClient(const CString& name, const CNetworkAddress& address, CScreen* screen)
 {
-	CClient* client = new CClient(name, address,
-						new CTCPSocketFactory, NULL, screen);
-	EVENTQUEUE->adoptHandler(CClient::getConnectedEvent(),
-						client->getEventTarget(),
-						new CFunctionEventJob(handleClientConnected));
-	EVENTQUEUE->adoptHandler(CClient::getConnectionFailedEvent(),
-						client->getEventTarget(),
-						new CFunctionEventJob(handleClientFailed));
-	EVENTQUEUE->adoptHandler(CClient::getDisconnectedEvent(),
-						client->getEventTarget(),
-						new CFunctionEventJob(handleClientDisconnected));
+	CClient* client = new CClient(
+		name, address, new CTCPSocketFactory, NULL, screen);
+
+	try {
+		EVENTQUEUE->adoptHandler(
+			CClient::getConnectedEvent(),
+			client->getEventTarget(),
+			new CFunctionEventJob(handleClientConnected));
+
+		EVENTQUEUE->adoptHandler(
+			CClient::getConnectionFailedEvent(),
+			client->getEventTarget(),
+			new CFunctionEventJob(handleClientFailed));
+
+		EVENTQUEUE->adoptHandler(
+			CClient::getDisconnectedEvent(),
+			client->getEventTarget(),
+			new CFunctionEventJob(handleClientDisconnected));
+
+	} catch (std::bad_alloc &ba) {
+		delete client;
+		throw ba;
+	}
+
 	return client;
 }
 
@@ -451,7 +445,7 @@ standardStartup(int argc, char** argv)
 	}
 
 	// parse command line
-	parse(argc, argv);
+	app.parse(argc, argv);
 
 	// daemonize if requested
 	if (ARG->m_daemon) {
@@ -476,12 +470,13 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 	}
 
 	// save log messages
-	CBufferedLogOutputter logBuffer(1000);
-	CLOG->insert(&logBuffer, true);
+	// use heap memory because CLog deletes outputters on destruction
+	CBufferedLogOutputter* logBuffer = new CBufferedLogOutputter(1000);
+	CLOG->insert(logBuffer, true);
 
 	// make the task bar receiver.  the user can control this app
 	// through the task bar.
-	s_taskBarReceiver = createTaskBarReceiver(&logBuffer);
+	s_taskBarReceiver = createTaskBarReceiver(logBuffer);
 
 	// run
 	int result = startup(argc, argv);
@@ -489,278 +484,9 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 	// done with task bar receiver
 	delete s_taskBarReceiver;
 
-	// done with log buffer
-	CLOG->remove(&logBuffer);
-
 	delete ARG->m_serverAddress;
 	return result;
 }
-
-
-//
-// command line parsing
-//
-
-#define BYE "\nTry `%s --help' for more information."
-
-static void				(*bye)(int) = &exit;
-
-static
-void
-version()
-{
-	LOG((CLOG_PRINT "%s %s, protocol version %d.%d\n%s",
-							ARG->m_pname,
-							kVersion,
-							kProtocolMajorVersion,
-							kProtocolMinorVersion,
-							kCopyright));
-}
-
-static
-void
-help()
-{
-#if WINAPI_XWINDOWS
-#  define USAGE_DISPLAY_ARG		\
-" [--display <display>]"
-#  define USAGE_DISPLAY_INFO	\
-"      --display <display>  connect to the X server at <display>\n"
-#else
-#  define USAGE_DISPLAY_ARG
-#  define USAGE_DISPLAY_INFO
-#endif
-
-	LOG((CLOG_PRINT
-"Usage: %s"
-" [--daemon|--no-daemon]"
-" [--debug <level>]"
-USAGE_DISPLAY_ARG
-" [--name <screen-name>]"
-" [--yscroll <delta>]"
-" [--restart|--no-restart]"
-" <server-address>"
-"\n\n"
-"Start the synergy mouse/keyboard sharing server.\n"
-"\n"
-"  -d, --debug <level>      filter out log messages with priorty below level.\n"
-"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
-"                           DEBUG, DEBUG1, DEBUG2.\n"
-USAGE_DISPLAY_INFO
-"  -f, --no-daemon          run the client in the foreground.\n"
-"*     --daemon             run the client as a daemon.\n"
-"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
-"                           ourself to the server.\n"
-"      --yscroll <delta>    defines the vertical scrolling delta, which is\n"
-"                           120 by default.\n"
-"  -1, --no-restart         do not try to restart the client if it fails for\n"
-"                           some reason.\n"
-"*     --restart            restart the client automatically if it fails.\n"
-"  -l  --log <file>         write log messages to file.\n"
-"  -h, --help               display this help and exit.\n"
-"      --version            display version information and exit.\n"
-"\n"
-"* marks defaults.\n"
-"\n"
-"The server address is of the form: [<hostname>][:<port>].  The hostname\n"
-"must be the address or hostname of the server.  The port overrides the\n"
-"default port, %d.\n"
-"\n"
-"Where log messages go depends on the platform and whether or not the\n"
-"client is running as a daemon.",
-								ARG->m_pname, kDefaultPort));
-
-}
-
-static
-bool
-isArg(int argi, int argc, const char* const* argv,
-				const char* name1, const char* name2,
-				int minRequiredParameters = 0)
-{
-	if ((name1 != NULL && strcmp(argv[argi], name1) == 0) ||
-		(name2 != NULL && strcmp(argv[argi], name2) == 0)) {
-		// match.  check args left.
-		if (argi + minRequiredParameters >= argc) {
-			LOG((CLOG_PRINT "%s: missing arguments for `%s'" BYE,
-								ARG->m_pname, argv[argi], ARG->m_pname));
-			bye(kExitArgs);
-		}
-		return true;
-	}
-
-	// no match
-	return false;
-}
-
-static
-void
-parse(int argc, const char* const* argv)
-{
-	assert(ARG->m_pname != NULL);
-	assert(argv         != NULL);
-	assert(argc         >= 1);
-
-	if(ARG->m_pname == NULL 
-		|| argv == NULL
-		|| argc < 1) {
-		return;
-	}
-
-	// set defaults
-	ARG->m_name = ARCH->getHostName();
-
-	// parse options
-	int i;
-	for (i = 1; i < argc; ++i) {
-		if (isArg(i, argc, argv, "-d", "--debug", 1)) {
-			// change logging level
-			ARG->m_logFilter = argv[++i];
-		}
-
-		else if (isArg(i, argc, argv, "-n", "--name", 1)) {
-			// save screen name
-			ARG->m_name = argv[++i];
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--camp")) {
-			// ignore -- included for backwards compatibility
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--no-camp")) {
-			// ignore -- included for backwards compatibility
-		}
-
-		else if (isArg(i, argc, argv, "-f", "--no-daemon")) {
-			// not a daemon
-			ARG->m_daemon = false;
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--daemon")) {
-			// daemonize
-			ARG->m_daemon = true;
-		}
-
-#if WINAPI_XWINDOWS
-		else if (isArg(i, argc, argv, "-display", "--display", 1)) {
-			// use alternative display
-			ARG->m_display = argv[++i];
-		}
-#endif
-
-		else if (isArg(i, argc, argv, NULL, "--yscroll", 1)) {
-			// define scroll 
-			ARG->m_yscroll = atoi(argv[++i]);
-		}
-		
-		else if (isArg(i, argc, argv, "-l", "--log", 1)) {
-			ARG->m_logFile = argv[++i];
-		}
-
-		else if (isArg(i, argc, argv, "-1", "--no-restart")) {
-			// don't try to restart
-			ARG->m_restartable = false;
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--restart")) {
-			// try to restart
-			ARG->m_restartable = true;
-		}
-
-		else if (isArg(i, argc, argv, "-z", NULL)) {
-			ARG->m_backend = true;
-		}
-
-		else if (isArg(i, argc, argv, "-h", "--help")) {
-			help();
-			bye(kExitSuccess);
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--version")) {
-			version();
-			bye(kExitSuccess);
-		}
-
-		else if (isArg(i, argc, argv, "--", NULL)) {
-			// remaining arguments are not options
-			++i;
-			break;
-		}
-
-		else if (argv[i][0] == '-') {
-			LOG((CLOG_PRINT "%s: unrecognized option `%s'" BYE,
-								ARG->m_pname, argv[i], ARG->m_pname));
-			bye(kExitArgs);
-		}
-
-		else {
-			// this and remaining arguments are not options
-			break;
-		}
-	}
-
-	// exactly one non-option argument (server-address)
-	if (i == argc) {
-		LOG((CLOG_PRINT "%s: a server address or name is required" BYE,
-								ARG->m_pname, ARG->m_pname));
-		bye(kExitArgs);
-	}
-	if (i + 1 != argc) {
-		LOG((CLOG_PRINT "%s: unrecognized option `%s'" BYE,
-								ARG->m_pname, argv[i], ARG->m_pname));
-		bye(kExitArgs);
-	}
-
-	// save server address
-	try {
-		*ARG->m_serverAddress = CNetworkAddress(argv[i], kDefaultPort);
-		ARG->m_serverAddress->resolve();
-	}
-	catch (XSocketAddress& e) {
-		// allow an address that we can't look up if we're restartable.
-		// we'll try to resolve the address each time we connect to the
-		// server.  a bad port will never get better.  patch by Brent
-		// Priddy.
-		if (!ARG->m_restartable || e.getError() == XSocketAddress::kBadPort) {
-			LOG((CLOG_PRINT "%s: %s" BYE,
-								ARG->m_pname, e.what(), ARG->m_pname));
-			bye(kExitFailed);
-		}
-	}
-
-	// increase default filter level for daemon.  the user must
-	// explicitly request another level for a daemon.
-	if (ARG->m_daemon && ARG->m_logFilter == NULL) {
-#if SYSAPI_WIN32
-		if (CArchMiscWindows::isWindows95Family()) {
-			// windows 95 has no place for logging so avoid showing
-			// the log console window.
-			ARG->m_logFilter = "FATAL";
-		}
-		else
-#endif
-		{
-			ARG->m_logFilter = "NOTE";
-		}
-	}
-
-	// set log filter
-	if (!CLOG->setFilter(ARG->m_logFilter)) {
-		LOG((CLOG_PRINT "%s: unrecognized log level `%s'" BYE,
-								ARG->m_pname, ARG->m_logFilter, ARG->m_pname));
-		bye(kExitArgs);
-	}
-
-	// identify system
-	LOG((CLOG_INFO "%s Client on %s %s", kAppVersion, ARCH->getOSName().c_str(), ARCH->getPlatformName().c_str()));
-
-#ifdef WIN32
-#ifdef _AMD64_
-	LOG((CLOG_WARN "This is an experimental x64 build of %s. Use it at your own risk.", kApplication));
-#endif
-#endif
-}
-
 
 //
 // platform dependent entry points
@@ -785,7 +511,6 @@ public:
 	virtual void		close() { }
 	virtual void		show(bool) { }
 	virtual bool		write(ELevel level, const char* message);
-	virtual const char*	getNewline() const { return ""; }
 };
 
 bool
@@ -819,7 +544,7 @@ static
 int
 daemonNTMainLoop(int argc, const char** argv)
 {
-	parse(argc, argv);
+	app.parse(argc, argv);
 	ARG->m_backend = false;
 	return CArchMiscWindows::runDaemon(mainLoop);
 }
@@ -829,7 +554,7 @@ int
 daemonNTStartup(int, char**)
 {
 	CSystemLogger sysLogger(DAEMON_NAME, false);
-	bye = &byeThrow;
+	app.m_bye = &byeThrow;
 	return ARCH->daemonize(DAEMON_NAME, &daemonNTMainLoop);
 }
 
@@ -840,7 +565,7 @@ foregroundStartup(int argc, char** argv)
 	ARCH->showConsole(false);
 
 	// parse command line
-	parse(argc, argv);
+	app.parse(argc, argv);
 
 	// never daemonize
 	return mainLoop();
@@ -853,6 +578,19 @@ showError(HINSTANCE instance, const char* title, UINT id, const char* arg)
 	CString fmt = CMSWindowsUtil::getString(instance, id);
 	CString msg = CStringUtil::format(fmt.c_str(), arg);
 	MessageBox(NULL, msg.c_str(), title, MB_OK | MB_ICONWARNING);
+}
+
+int main(int argc, char** argv) {
+
+	app.m_daemonName = DAEMON_NAME;
+	app.m_daemonInfo = DAEMON_INFO;
+	app.util().m_instance = GetModuleHandle(NULL);
+
+	if (app.util().m_instance) {
+		return WinMain(app.util().m_instance, NULL, GetCommandLine(), SW_SHOWNORMAL);
+	} else {
+		return kExitFailed;
+	}
 }
 
 int WINAPI
@@ -871,35 +609,31 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 		CMSWindowsScreen::init(instance);
 		CLOG;
 		CThread::getCurrentThread().setPriority(-14);
-		CArgs args;
 
-		// set title on log window
-		ARCH->openConsole((CString(kAppVersion) + " " + "Client").c_str());
-
-		// windows NT family starts services using no command line options.
-		// since i'm not sure how to tell the difference between that and
-		// a user providing no options we'll assume that if there are no
-		// arguments and we're on NT then we're being invoked as a service.
-		// users on NT can use `--daemon' or `--no-daemon' to force us out
-		// of the service code path.
-		StartupFunc startup = &standardStartup;
+		StartupFunc startup;
 		if (!CArchMiscWindows::isWindows95Family()) {
-			if (__argc <= 1) {
+
+			// WARNING: this may break backwards computability!
+			// previously, we were assuming that the process is launched from the
+			// service host when no arguments were passed. if we wanted to launch
+			// from console or debugger, we had to remember to pass -f which was
+			// always the first pitfall for new committers. now, we are able to
+			// check using the new `wasLaunchedAsService` function, which is a
+			// more elegant solution.
+			if (CArchMiscWindows::wasLaunchedAsService()) {
 				startup = &daemonNTStartup;
-			}
-			else {
+			} else {
 				startup = &foregroundStartup;
+				ARG->m_daemon = false;
 			}
+		} else {
+			startup = &standardStartup;
 		}
 
-		// send PRINT and FATAL output to a message box
-		int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
-
-		// let user examine any messages if we're running as a backend
-		// by putting up a dialog box before exiting.
-		if (args.m_backend && s_hasImportantLogMessages) {
-			showError(instance, args.m_pname, IDS_FAILED, "");
-		}
+		// previously we'd send PRINT and FATAL output to a message box, but now
+		// that we're using an MS console window for Windows, there's no need really
+		//int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
+		int result = run(__argc, __argv, NULL, startup);
 
 		delete CLOG;
 		return result;
@@ -911,9 +645,11 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 	catch (XArch& e) {
 		showError(instance, __argv[0], IDS_INIT_FAILED, e.what().c_str());
 	}
+	catch (std::exception& e) {
+		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, e.what());
+	}
 	catch (...) {
-		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown>");
-		//throw;
+		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown exception>");
 	}
 	return kExitFailed;
 }
@@ -923,12 +659,10 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 int
 main(int argc, char** argv)
 {
-	CArgs args;
 	try {
 		int result;
 		CArch arch;
 		CLOG;
-		CArgs args;
 		result = run(argc, argv, NULL, &standardStartup);
 		delete CLOG;
 		return result;
@@ -940,6 +674,10 @@ main(int argc, char** argv)
 	catch (XArch& e) {
 		LOG((CLOG_CRIT "Initialization failed: %s" BYE, e.what().c_str()));
 		return kExitFailed;
+	}
+	catch (std::exception& e) {
+		LOG((CLOG_CRIT "Uncaught exception: %s\n", e.what()));
+		throw;
 	}
 	catch (...) {
 		LOG((CLOG_CRIT "Uncaught exception: <unknown exception>\n"));

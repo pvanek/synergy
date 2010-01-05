@@ -33,8 +33,12 @@
 #include "LogOutputters.h"
 #include "CArch.h"
 #include "XArch.h"
+#include "CArchConsoleStd.h"
 #include "stdfstream.h"
+
 #include <cstring>
+#include <iostream>
+#include <sstream>
 
 #define DAEMON_RUNNING(running_)
 #if WINAPI_MSWINDOWS
@@ -43,76 +47,44 @@
 #include "CMSWindowsUtil.h"
 #include "CMSWindowsServerTaskBarReceiver.h"
 #include "resource.h"
+#include "CArchDaemonWindows.h"
+#include "CMSWindowsServerApp.h"
+#include "CMSWindowsAppUtil.h"
 #undef DAEMON_RUNNING
 #define DAEMON_RUNNING(running_) CArchMiscWindows::daemonRunning(running_)
 #elif WINAPI_XWINDOWS
 #include "CXWindowsScreen.h"
 #include "CXWindowsServerTaskBarReceiver.h"
+#include "CXWindowsServerApp.h"
+#include "CXWindowsAppUtil.h"
 #elif WINAPI_CARBON
 #include "COSXScreen.h"
 #include "COSXServerTaskBarReceiver.h"
+#include "COSXServerApp.h"
+#include "COSXAppUtil.h"
 #endif
 
 // platform dependent name of a daemon
 #if SYSAPI_WIN32
 #define DAEMON_NAME "Synergy+ Server"
+#define DAEMON_INFO "Shares this computers mouse and keyboard with other computers."
 #elif SYSAPI_UNIX
 #define DAEMON_NAME "synergys"
 #endif
 
-// configuration file name
-#if SYSAPI_WIN32
-#define USR_CONFIG_NAME "synergy.sgc"
-#define SYS_CONFIG_NAME "synergy.sgc"
-#elif SYSAPI_UNIX
-#define USR_CONFIG_NAME ".synergy.conf"
-#define SYS_CONFIG_NAME "synergy.conf"
-#endif
-
 typedef int (*StartupFunc)(int, char**);
-static void parse(int argc, const char* const* argv);
 static bool loadConfig(const CString& pathname);
 static void loadConfig();
 
-//
-// program arguments
-//
+#if WINAPI_MSWINDOWS
+CMSWindowsServerApp app;
+#elif WINAPI_XWINDOWS
+CXWindowsServerApp app;
+#elif WINAPI_CARBON
+COSXServerApp app;
+#endif
 
-#define ARG CArgs::s_instance
-
-class CArgs {
-public:
-	CArgs() :
-		m_pname(NULL),
-		m_backend(false),
-		m_restartable(true),
-		m_daemon(true),
-		m_configFile(),
-		m_logFilter(NULL),
-		m_logFile(NULL),
-		m_display(NULL),
-		m_synergyAddress(NULL),
-		m_config(NULL)
-		{ s_instance = this; }
-	~CArgs() { s_instance = NULL; }
-
-public:
-	static CArgs*		s_instance;
-	const char* 		m_pname;
-	bool				m_backend;
-	bool				m_restartable;
-	bool				m_daemon;
-	CString		 		m_configFile;
-	const char* 		m_logFilter;
-	const char*			m_logFile;
-	const char*			m_display;
-	CString 			m_name;
-	CNetworkAddress*	m_synergyAddress;
-	CConfig*			m_config;
-};
-
-CArgs*					CArgs::s_instance = NULL;
-
+#define ARG ((CServerApp::CArgs*)&app.args())
 
 //
 // platform dependent factories
@@ -318,8 +290,17 @@ CServer*
 openServer(const CConfig& config, CPrimaryClient* primaryClient)
 {
 	CServer* server = new CServer(config, primaryClient);
-	EVENTQUEUE->adoptHandler(CServer::getDisconnectedEvent(), server,
-						new CFunctionEventJob(handleNoClients));
+	
+	try {
+		EVENTQUEUE->adoptHandler(
+			CServer::getDisconnectedEvent(), server,
+			new CFunctionEventJob(handleNoClients));
+
+	} catch (std::bad_alloc &ba) {
+		delete server;
+		throw ba;
+	}
+	
 	return server;
 }
 
@@ -744,6 +725,7 @@ mainLoop()
 	return kExitSuccess;
 }
 
+// used by windows nt (service mode)
 static
 int
 daemonMainLoop(int, const char**)
@@ -756,13 +738,14 @@ daemonMainLoop(int, const char**)
 	return mainLoop();
 }
 
+// used by unix and win95
 static
 int
 standardStartup(int argc, char** argv)
 {
 
 	// parse command line
-	parse(argc, argv);
+	app.parse(argc, argv);
 
 	// load configuration
 	loadConfig();
@@ -791,21 +774,19 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 	}
 
 	// save log messages
-	CBufferedLogOutputter logBuffer(1000);
-	CLOG->insert(&logBuffer, true);
+	// use heap memory because CLog deletes outputters on destruction
+	CBufferedLogOutputter* logBuffer = new CBufferedLogOutputter(1000);
+	CLOG->insert(logBuffer, true);
 
 	// make the task bar receiver.  the user can control this app
 	// through the task bar.
-	s_taskBarReceiver = createTaskBarReceiver(&logBuffer);
+	s_taskBarReceiver = createTaskBarReceiver(logBuffer);
 
 	// run
 	int result = startup(argc, argv);
 
 	// done with task bar receiver
 	delete s_taskBarReceiver;
-
-	// done with log buffer
-	CLOG->remove(&logBuffer);
 
 	delete ARG->m_config;
 	delete ARG->m_synergyAddress;
@@ -816,282 +797,6 @@ run(int argc, char** argv, ILogOutputter* outputter, StartupFunc startup)
 //
 // command line parsing
 //
-
-#define BYE "\nTry `%s --help' for more information."
-
-static void				(*bye)(int) = &exit;
-
-static
-void
-version()
-{
-	LOG((CLOG_PRINT
-"%s %s, protocol version %d.%d\n"
-"%s",
-								ARG->m_pname,
-								kVersion,
-								kProtocolMajorVersion,
-								kProtocolMinorVersion,
-								kCopyright));
-}
-
-static
-void
-help()
-{
-#if WINAPI_XWINDOWS
-#  define USAGE_DISPLAY_ARG		\
-" [--display <display>]"
-#  define USAGE_DISPLAY_INFO	\
-"      --display <display>  connect to the X server at <display>\n"
-#else
-#  define USAGE_DISPLAY_ARG
-#  define USAGE_DISPLAY_INFO
-#endif
-
-#if SYSAPI_WIN32
-
-#  define PLATFORM_ARGS														\
-" [--daemon|--no-daemon]"
-#  define PLATFORM_DESC
-#  define PLATFORM_EXTRA													\
-"At least one command line argument is required.  If you don't otherwise\n"	\
-"need an argument use `--daemon'.\n"										\
-"\n"
-
-#else
-
-#  define PLATFORM_ARGS														\
-" [--daemon|--no-daemon]"
-#  define PLATFORM_DESC
-#  define PLATFORM_EXTRA
-
-#endif
-
-	LOG((CLOG_PRINT
-"Usage: %s"
-" [--address <address>]"
-" [--config <pathname>]"
-" [--debug <level>]"
-USAGE_DISPLAY_ARG
-" [--name <screen-name>]"
-" [--restart|--no-restart]"
-PLATFORM_ARGS
-"\n\n"
-"Start the synergy mouse/keyboard sharing server.\n"
-"\n"
-"  -a, --address <address>  listen for clients on the given address.\n"
-"  -c, --config <pathname>  use the named configuration file instead.\n"
-"  -d, --debug <level>      filter out log messages with priorty below level.\n"
-"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
-"                           DEBUG, DEBUG1, DEBUG2.\n"
-USAGE_DISPLAY_INFO
-"  -f, --no-daemon          run the server in the foreground.\n"
-"*     --daemon             run the server as a daemon.\n"
-"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
-"                           this screen in the configuration.\n"
-"  -1, --no-restart         do not try to restart the server if it fails for\n"
-"                           some reason.\n"
-"*     --restart            restart the server automatically if it fails.\n"
-"  -l  --log <file>         write log messages to file.\n"
-PLATFORM_DESC
-"  -h, --help               display this help and exit.\n"
-"      --version            display version information and exit.\n"
-"\n"
-"* marks defaults.\n"
-"\n"
-PLATFORM_EXTRA
-"The argument for --address is of the form: [<hostname>][:<port>].  The\n"
-"hostname must be the address or hostname of an interface on the system.\n"
-"The default is to listen on all interfaces.  The port overrides the\n"
-"default port, %d.\n"
-"\n"
-"If no configuration file pathname is provided then the first of the\n"
-"following to load successfully sets the configuration:\n"
-"  %s\n"
-"  %s\n"
-"If no configuration file can be loaded then the configuration uses its\n"
-"defaults with just the server screen.\n"
-"\n"
-"Where log messages go depends on the platform and whether or not the\n"
-"server is running as a daemon.",
-								ARG->m_pname,
-								kDefaultPort,
-								ARCH->concatPath(
-									ARCH->getUserDirectory(),
-									USR_CONFIG_NAME).c_str(),
-								ARCH->concatPath(
-									ARCH->getSystemDirectory(),
-									SYS_CONFIG_NAME).c_str()));
-}
-
-static
-bool
-isArg(int argi, int argc, const char* const* argv,
-				const char* name1, const char* name2,
-				int minRequiredParameters = 0)
-{
-	if ((name1 != NULL && strcmp(argv[argi], name1) == 0) ||
-		(name2 != NULL && strcmp(argv[argi], name2) == 0)) {
-		// match.  check args left.
-		if (argi + minRequiredParameters >= argc) {
-			LOG((CLOG_PRINT "%s: missing arguments for `%s'" BYE,
-								ARG->m_pname, argv[argi], ARG->m_pname));
-			bye(kExitArgs);
-		}
-		return true;
-	}
-
-	// no match
-	return false;
-}
-
-static
-void
-parse(int argc, const char* const* argv)
-{
-	assert(ARG->m_pname != NULL);
-	assert(argv       != NULL);
-	assert(argc       >= 1);
-
-	// set defaults
-	ARG->m_name = ARCH->getHostName();
-
-	// parse options
-	int i = 1;
-	for (; i < argc; ++i) {
-		if (isArg(i, argc, argv, "-d", "--debug", 1)) {
-			// change logging level
-			ARG->m_logFilter = argv[++i];
-		}
-
-		else if (isArg(i, argc, argv, "-a", "--address", 1)) {
-			// save listen address
-			try {
-				*ARG->m_synergyAddress = CNetworkAddress(argv[i + 1],
-														kDefaultPort);
-				ARG->m_synergyAddress->resolve();
-			}
-			catch (XSocketAddress& e) {
-				LOG((CLOG_PRINT "%s: %s" BYE,
-								ARG->m_pname, e.what(), ARG->m_pname));
-				bye(kExitArgs);
-			}
-			++i;
-		}
-
-		else if (isArg(i, argc, argv, "-n", "--name", 1)) {
-			// save screen name
-			ARG->m_name = argv[++i];
-		}
-
-		else if (isArg(i, argc, argv, "-c", "--config", 1)) {
-			// save configuration file path
-			ARG->m_configFile = argv[++i];
-		}
-
-#if WINAPI_XWINDOWS
-		else if (isArg(i, argc, argv, "-display", "--display", 1)) {
-			// use alternative display
-			ARG->m_display = argv[++i];
-		}
-#endif
-
-		else if (isArg(i, argc, argv, "-f", "--no-daemon")) {
-			// not a daemon
-			ARG->m_daemon = false;
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--daemon")) {
-			// daemonize
-			ARG->m_daemon = true;
-		}
-		else if (isArg(i, argc, argv, "-l", "--log", 1)) {
-			// logging to file
-			ARG->m_logFile = argv[++i];
-		}
-
-		else if (isArg(i, argc, argv, "-1", "--no-restart")) {
-			// don't try to restart
-			ARG->m_restartable = false;
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--restart")) {
-			// try to restart
-			ARG->m_restartable = true;
-		}
-
-		else if (isArg(i, argc, argv, "-z", NULL)) {
-			ARG->m_backend = true;
-		}
-
-		else if (isArg(i, argc, argv, "-h", "--help")) {
-			help();
-			bye(kExitSuccess);
-		}
-
-		else if (isArg(i, argc, argv, NULL, "--version")) {
-			version();
-			bye(kExitSuccess);
-		}
-
-		else if (isArg(i, argc, argv, "--", NULL)) {
-			// remaining arguments are not options
-			++i;
-			break;
-		}
-
-		else if (argv[i][0] == '-') {
-			LOG((CLOG_PRINT "%s: unrecognized option `%s'" BYE,
-								ARG->m_pname, argv[i], ARG->m_pname));
-			bye(kExitArgs);
-		}
-
-		else {
-			// this and remaining arguments are not options
-			break;
-		}
-	}
-
-	// no non-option arguments are allowed
-	if (i != argc) {
-		LOG((CLOG_PRINT "%s: unrecognized option `%s'" BYE,
-								ARG->m_pname, argv[i], ARG->m_pname));
-		bye(kExitArgs);
-	}
-
-	// increase default filter level for daemon.  the user must
-	// explicitly request another level for a daemon.
-	if (ARG->m_daemon && ARG->m_logFilter == NULL) {
-#if SYSAPI_WIN32
-		if (CArchMiscWindows::isWindows95Family()) {
-			// windows 95 has no place for logging so avoid showing
-			// the log console window.
-			ARG->m_logFilter = "FATAL";
-		}
-		else
-#endif
-		{
-			ARG->m_logFilter = "NOTE";
-		}
-	}
-
-	// set log filter
-	if (!CLOG->setFilter(ARG->m_logFilter)) {
-		LOG((CLOG_PRINT "%s: unrecognized log level `%s'" BYE,
-								ARG->m_pname, ARG->m_logFilter, ARG->m_pname));
-		bye(kExitArgs);
-	}
-
-	// identify system
-	LOG((CLOG_INFO "%s Server on %s %s", kAppVersion, ARCH->getOSName().c_str(), ARCH->getPlatformName().c_str()));
-
-#ifdef WIN32
-#ifdef _AMD64_
-	LOG((CLOG_WARN "This is an experimental x64 build of %s. Use it at your own risk.", kApplication));
-#endif
-#endif
-}
 
 static
 bool
@@ -1161,7 +866,7 @@ loadConfig()
 
 	if (!loaded) {
 		LOG((CLOG_PRINT "%s: no configuration available", ARG->m_pname));
-		bye(kExitConfig);
+		app.m_bye(kExitConfig);
 	}
 }
 
@@ -1190,7 +895,6 @@ public:
 	virtual void		close() { }
 	virtual void		show(bool) { }
 	virtual bool		write(ELevel level, const char* message);
-	virtual const char*	getNewline() const { return ""; }
 };
 
 bool
@@ -1224,7 +928,7 @@ static
 int
 daemonNTMainLoop(int argc, const char** argv)
 {
-	parse(argc, argv);
+	app.parse(argc, argv);
 	ARG->m_backend = false;
 	loadConfig();
 	return CArchMiscWindows::runDaemon(mainLoop);
@@ -1235,17 +939,17 @@ int
 daemonNTStartup(int, char**)
 {
 	CSystemLogger sysLogger(DAEMON_NAME, false);
-	bye = &byeThrow;
+	app.m_bye = &byeThrow;
 	return ARCH->daemonize(DAEMON_NAME, &daemonNTMainLoop);
 }
 
+// used by windows nt (foreground)
 static
 int
 foregroundStartup(int argc, char** argv)
 {
-
 	// parse command line
-	parse(argc, argv);
+	app.parse(argc, argv);
 
 	// load configuration
 	loadConfig();
@@ -1260,12 +964,32 @@ showError(HINSTANCE instance, const char* title, UINT id, const char* arg)
 {
 	CString fmt = CMSWindowsUtil::getString(instance, id);
 	CString msg = CStringUtil::format(fmt.c_str(), arg);
-	MessageBox(NULL, msg.c_str(), title, MB_OK | MB_ICONWARNING);
+	LOG((CLOG_ERR "%s", msg.c_str()));
+	app.m_bye(kExitFailed);
+}
+
+int main(int argc, char** argv) {
+	
+	app.m_daemonName = DAEMON_NAME;
+	app.m_daemonInfo = DAEMON_INFO;
+	app.util().m_instance = GetModuleHandle(NULL);
+
+	if (app.util().m_instance) {
+		return WinMain(app.util().m_instance, NULL, GetCommandLine(), SW_SHOWNORMAL);
+	} else {
+		return kExitFailed;
+	}
 }
 
 int WINAPI
 WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 {
+	// instantiate before the try-catch block, so they are destroyed after the
+	// exception handling (we may need to log exception message). these should
+	// not throw exceptions at this stage, so this code should be pretty safe.
+	CArch arch(instance);
+	CLOG;
+
 	try {
 		CArchMiscWindows::setIcons((HICON)LoadImage(instance,
 									MAKEINTRESOURCE(IDI_SYNERGY),
@@ -1275,53 +999,49 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 									MAKEINTRESOURCE(IDI_SYNERGY),
 									IMAGE_ICON,
 									16, 16, LR_SHARED));
-		CArch arch(instance);
+
 		CMSWindowsScreen::init(instance);
-		CLOG;
 		CThread::getCurrentThread().setPriority(-14);
-		CArgs args;
-
-		// set title on log window
-		ARCH->openConsole((CString(kAppVersion) + " " + "Server").c_str());
-
-		// windows NT family starts services using no command line options.
-		// since i'm not sure how to tell the difference between that and
-		// a user providing no options we'll assume that if there are no
-		// arguments and we're on NT then we're being invoked as a service.
-		// users on NT can use `--daemon' or `--no-daemon' to force us out
-		// of the service code path.
-		StartupFunc startup = &standardStartup;
+		
+		StartupFunc startup;
 		if (!CArchMiscWindows::isWindows95Family()) {
-			if (__argc <= 1) {
+
+			// WARNING: this may break backwards computability!
+			// previously, we were assuming that the process is launched from the
+			// service host when no arguments were passed. if we wanted to launch
+			// from console or debugger, we had to remember to pass -f which was
+			// always the first pitfall for new committers. now, we are able to
+			// check using the new `wasLaunchedAsService` function, which is a
+			// more elegant solution.
+			if (CArchMiscWindows::wasLaunchedAsService()) {
 				startup = &daemonNTStartup;
-			}
-			else {
+			} else {
 				startup = &foregroundStartup;
+				ARG->m_daemon = false;
 			}
+		} else {
+			startup = &standardStartup;
 		}
 
-		// send PRINT and FATAL output to a message box
-		int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
-
-		// let user examine any messages if we're running as a backend
-		// by putting up a dialog box before exiting.
-		if (args.m_backend && s_hasImportantLogMessages) {
-			showError(instance, args.m_pname, IDS_FAILED, "");
-		}
+		// previously we'd send PRINT and FATAL output to a message box, but now
+		// that we're using an MS console window for Windows, there's no need really
+		//int result = run(__argc, __argv, new CMessageBoxOutputter, startup);
+		int result = run(__argc, __argv, NULL, startup);
 
 		delete CLOG;
 		return result;
 	}
 	catch (XBase& e) {
 		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, e.what());
-		//throw;
 	}
 	catch (XArch& e) {
 		showError(instance, __argv[0], IDS_INIT_FAILED, e.what().c_str());
 	}
+	catch (std::exception& e) {
+		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, e.what());
+	}
 	catch (...) {
-		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown>");
-		//throw;
+		showError(instance, __argv[0], IDS_UNCAUGHT_EXCEPTION, "<unknown exception>");
 	}
 	return kExitFailed;
 }
@@ -1331,12 +1051,10 @@ WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 int
 main(int argc, char** argv)
 {
-	CArgs args;
 	try {
 		int result;
 		CArch arch;
 		CLOG;
-		CArgs args;
 		result = run(argc, argv, NULL, &standardStartup);
 		delete CLOG;
 		return result;
@@ -1348,6 +1066,10 @@ main(int argc, char** argv)
 	catch (XArch& e) {
 		LOG((CLOG_CRIT "Initialization failed: %s" BYE, e.what().c_str()));
 		return kExitFailed;
+	}
+	catch (std::exception& e) {
+		LOG((CLOG_CRIT "Uncaught exception: %s\n", e.what()));
+		throw;
 	}
 	catch (...) {
 		LOG((CLOG_CRIT "Uncaught exception: <unknown exception>\n"));
