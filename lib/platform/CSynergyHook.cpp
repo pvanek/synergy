@@ -156,9 +156,6 @@ attachThreadToForeground()
 	// already in the right thread.
 	if (g_hookThread != 0) {
 		HWND window    = GetForegroundWindow();
-        if (window == NULL)
-            return false;
-
 		DWORD threadID = GetWindowThreadProcessId(window, NULL);
 		// skip if no change
 		if (g_attachedThread != threadID) {

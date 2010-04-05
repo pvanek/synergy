@@ -691,7 +691,6 @@ CMSWindowsDesks::deskLeave(CDesk* desk, HKL keyLayout)
 		SetCapture(desk->m_window);
 
 		// warp the mouse to the cursor center
-		LOG((CLOG_DEBUG2 "warping cursor to center: %+d,%+d", m_xCenter, m_yCenter));
 		deskMouseMove(m_xCenter, m_yCenter);
 	}
 }
