@@ -32,7 +32,7 @@ class CThread;
 //! Implementation of IPlatformScreen for Microsoft Windows
 class CMSWindowsScreen : public CPlatformScreen {
 public:
-	CMSWindowsScreen(bool isPrimary, bool noHooks);
+	CMSWindowsScreen(bool isPrimar, bool noHooks);
 	virtual ~CMSWindowsScreen();
 
 	//! @name manipulators
@@ -218,9 +218,6 @@ private:
 
 	// true if hooks are not to be installed (useful for debugging)
 	bool				m_noHooks;
-
-	// true if windows 95/98/me
-	bool				m_is95Family;
 
 	// true if mouse has entered the screen
 	bool				m_isOnScreen;

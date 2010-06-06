@@ -20,37 +20,17 @@
 #include "CApp.h"
 #include "LogOutputters.h"
 #include "CMSWindowsScreen.h"
-#include "XSynergy.h"
-#include "IArchTaskBarReceiver.h"
-#include "CMSWindowsRelauncher.h"
-#include "CScreen.h"
 
 #include <sstream>
 #include <iostream>
 #include <conio.h>
 
-CArchAppUtilWindows::CArchAppUtilWindows() :
-m_exitMode(kExitModeNormal)
+CArchAppUtilWindows::CArchAppUtilWindows()
 {
-	if (SetConsoleCtrlHandler((PHANDLER_ROUTINE)consoleHandler, TRUE) == FALSE)
-    {
-		throw XArchEvalWindows();
-    }
 }
 
 CArchAppUtilWindows::~CArchAppUtilWindows()
 {
-}
-
-BOOL WINAPI CArchAppUtilWindows::consoleHandler(DWORD CEvent)
-{
-	// HACK: it would be nice to delete the s_taskBarReceiver object, but 
-	// this is best done by the CApp destructor; however i don't feel like
-	// opening up that can of worms today... i need sleep.
-	instance().app().s_taskBarReceiver->cleanup();
-
-	ExitProcess(kExitTerminated);
-    return TRUE;
 }
 
 bool 
@@ -78,19 +58,19 @@ CArchAppUtilWindows::parseArg(const int& argc, const char* const* argv, int& i)
 		}
 		app().m_bye(kExitSuccess);
 	}
-	else if (app().isArg(i, argc, argv, NULL, "--debug-service-wait")) {
-
-		app().argsBase().m_debugServiceWait = true;
-	}
-	else if (app().isArg(i, argc, argv, NULL, "--relaunch")) {
-		app().argsBase().m_relaunchMode = true;
-	}
 	else {
 		// option not supported here
 		return false;
 	}
 
 	return true;
+}
+
+void
+CArchAppUtilWindows::adoptApp(CApp* app)
+{
+	app->m_bye = &exitPause;
+	CArchAppUtil::adoptApp(app);
 }
 
 CString
@@ -192,7 +172,24 @@ CArchAppUtilWindows::stopService()
 		}
 	}
 
-	LOG((CLOG_INFO "service '%s' stopping asynchronously", app().daemonName()));
+	LOG((CLOG_INFO "service '%s' stopping asyncronously", app().daemonName()));
+}
+
+void
+exitPause(int code)
+{
+	CString name;
+	CArchMiscWindows::getParentProcessName(name);
+
+	// if the user did not launch from the command prompt (i.e. it was launched
+	// by double clicking, or through a debugger), allow user to read any error
+	// messages (instead of the window closing automatically).
+	if (name != "cmd.exe") {
+		std::cout << std::endl << "Press any key to exit...";
+		int c = _getch();
+	}
+
+	exit(code);
 }
 
 static
@@ -205,39 +202,28 @@ mainLoopStatic()
 int 
 CArchAppUtilWindows::daemonNTMainLoop(int argc, const char** argv)
 {
-	app().initApp(argc, argv);
-	debugServiceWait();
-
-	// NB: what the hell does this do?!
+	app().parseArgs(argc, argv);
 	app().argsBase().m_backend = false;
-	
+	app().loadConfig();
 	return CArchMiscWindows::runDaemon(mainLoopStatic);
 }
 
 void 
-CArchAppUtilWindows::exitApp(int code)
+CArchAppUtilWindows::byeThrow(int x)
 {
-	switch (m_exitMode) {
-
-		case kExitModeDaemon:
-			CArchMiscWindows::daemonFailed(code);
-			break;
-
-		default:
-			throw XExitApp(code);
-	}
+	CArchMiscWindows::daemonFailed(x);
 }
 
 int daemonNTMainLoopStatic(int argc, const char** argv)
 {
-	return CArchAppUtilWindows::instance().daemonNTMainLoop(argc, argv);
+	return CArchAppUtil::instance().app().daemonMainLoop(argc, argv);
 }
 
 int 
 CArchAppUtilWindows::daemonNTStartup(int, char**)
 {
 	CSystemLogger sysLogger(app().daemonName(), false);
-	m_exitMode = kExitModeDaemon;
+	app().m_bye = &byeThrow;
 	return ARCH->daemonize(app().daemonName(), daemonNTMainLoopStatic);
 }
 
@@ -253,21 +239,6 @@ int
 foregroundStartupStatic(int argc, char** argv)
 {
 	return CArchAppUtil::instance().app().foregroundStartup(argc, argv);
-}
-
-void
-CArchAppUtilWindows::beforeAppExit()
-{
-	CString name;
-	CArchMiscWindows::getParentProcessName(name);
-
-	// if the user did not launch from the command prompt (i.e. it was launched
-	// by double clicking, or through a debugger), allow user to read any error
-	// messages (instead of the window closing automatically).
-	if (name != "cmd.exe") {
-		std::cout << std::endl << "Press any key to exit..." << std::endl;
-		int c = _getch();
-	}
 }
 
 int
@@ -294,39 +265,4 @@ CArchAppUtilWindows&
 CArchAppUtilWindows::instance()
 {
 	return (CArchAppUtilWindows&)CArchAppUtil::instance();
-}
-
-void 
-CArchAppUtilWindows::debugServiceWait()
-{
-	if (app().argsBase().m_debugServiceWait)
-	{
-		while(true)
-		{
-			// this code is only executed when the process is launched via the
-			// windows service controller (and --debug-service-wait arg is 
-			// used). to debug, set a breakpoint on this line so that 
-			// execution is delayed until the debugger is attached.
-			ARCH->sleep(1);
-			LOG((CLOG_INFO "waiting for debugger to attach"));
-		}
-	}
-}
-
-void 
-CArchAppUtilWindows::startNode()
-{
-	if (app().argsBase().m_relaunchMode) {
-
-		LOG((CLOG_DEBUG1 "entering relaunch mode"));
-		CMSWindowsRelauncher relauncher;
-		relauncher.startAsync();
-
-		// HACK: create a dummy screen, which can handle system events 
-		// (such as a stop request from the service controller).
-		CScreen* dummyScreen = app().createScreen();
-	}
-	else {
-		app().startNode();
-	}
 }

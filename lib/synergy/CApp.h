@@ -20,8 +20,6 @@
 class IArchTaskBarReceiver;
 class CBufferedLogOutputter;
 class ILogOutputter;
-class CFileLogOutputter;
-class CScreen;
 
 typedef IArchTaskBarReceiver* (*CreateTaskBarReceiverFunc)(const CBufferedLogOutputter*);
 typedef int (*StartupFunc)(int, char**);
@@ -41,10 +39,6 @@ public:
 		const char*	m_logFile;
 		const char*	m_display;
 		CString m_name;
-#if SYSAPI_WIN32
-		bool m_relaunchMode;
-		bool m_debugServiceWait;
-#endif
 	};
 
 	CApp(CArgsBase* args);
@@ -93,23 +87,6 @@ public:
 	bool s_suspended;
 	IArchTaskBarReceiver* s_taskBarReceiver;
 
-	// If --log was specified in args, then add a file logger.
-	void setupFileLogging();
-
-	// If messages will be hidden (to improve performance), warn user.
-	void loggingFilterWarning();
-
-	// Parses args, sets up file logging, and loads the config.
-	void initApp(int argc, const char** argv);
-
-	// HACK: accept non-const, but make it const anyway
-	void initApp(int argc, char** argv) { initApp(argc, (const char**)argv); }
-
-	// Start the server or client.
-	virtual void startNode() = 0;
-
-	virtual CScreen* createScreen() = 0;
-
 protected:
 	virtual void parseArgs(int argc, const char* const* argv, int &i);
 	virtual bool parseArg(const int& argc, const char* const* argv, int& i);
@@ -117,7 +94,6 @@ protected:
 private:
 	CArgsBase* m_args;
 	static CApp* s_instance;
-	CFileLogOutputter* m_fileLog;
 };
 
 #define BYE "\nTry `%s --help' for more information."
@@ -126,46 +102,4 @@ private:
 #define DAEMON_RUNNING(running_) CArchMiscWindows::daemonRunning(running_)
 #else
 #define DAEMON_RUNNING(running_)
-#endif
-
-#define HELP_COMMON_INFO_1 \
-	"  -d, --debug <level>      filter out log messages with priorty below level.\n" \
-	"                             level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n" \
-	"                             DEBUG, DEBUGn (1-5).\n" \
-	"  -n, --name <screen-name> use screen-name instead the hostname to identify\n" \
-	"                             this screen in the configuration.\n" \
-	"  -1, --no-restart         do not try to restart on failure.\n" \
-	"*     --restart            restart the server automatically if it fails.\n" \
-	"  -l  --log <file>         write log messages to file.\n"
-
-#define HELP_COMMON_INFO_2 \
-	"  -h, --help               display this help and exit.\n" \
-	"      --version            display version information and exit.\n"
-
-#define HELP_COMMON_ARGS \
-	" [--name <screen-name>]" \
-	" [--restart|--no-restart]" \
-	" [--debug <level>]"
-
-// system args (windows/unix)
-#if SYSAPI_UNIX
-
-// unix daemon mode args
-#  define HELP_SYS_ARGS \
-	" [--daemon|--no-daemon]"
-#  define HELP_SYS_INFO \
-    "  -f, --no-daemon          run in the foreground.\n" \
-    "*     --daemon             run as a daemon.\n"
-
-#elif SYSAPI_WIN32
-
-// windows service management args
-#  define HELP_SYS_ARGS \
-	" [--service <action>]"
-#  define HELP_SYS_INFO \
-	"      --service <action>   manage the windows service, valid options are:\n" \
-	"                             install/uninstall/start/stop\n" \
-	"      --relaunch           persistently relaunches process in current user \n" \
-	"                             session (useful for vista and upward).\n"
-
 #endif

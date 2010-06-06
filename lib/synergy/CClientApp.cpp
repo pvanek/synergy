@@ -146,43 +146,72 @@ CClientApp::parseArgs(int argc, const char* const* argv)
 	// identify system
 	LOG((CLOG_INFO "%s Client on %s %s", kAppVersion, ARCH->getOSName().c_str(), ARCH->getPlatformName().c_str()));
 
-	loggingFilterWarning();
+#ifdef WIN32
+#ifdef _AMD64_
+	LOG((CLOG_WARN "This is an experimental x64 build of %s. Use it at your own risk.", kApplication));
+#endif
+#endif
+
+	if (CLOG->getFilter() > CLOG->getConsoleMaxLevel()) {
+		if (args().m_logFile == NULL) {
+			LOG((CLOG_WARN "log messages above %s are NOT sent to console (use file logging)", 
+				CLOG->getFilterName(CLOG->getConsoleMaxLevel())));
+		}
+	}
 }
 
 void
 CClientApp::help()
 {
 #if WINAPI_XWINDOWS
-#  define WINAPI_ARG \
+#  define USAGE_DISPLAY_ARG		\
 	" [--display <display>]"
-#  define WINAPI_INFO \
+#  define USAGE_DISPLAY_INFO	\
 	"      --display <display>  connect to the X server at <display>\n"
 #else
-#  define WINAPI_ARG
-#  define WINAPI_INFO
+#  define USAGE_DISPLAY_ARG
+#  define USAGE_DISPLAY_INFO
 #endif
 
 	char buffer[2000];
 	sprintf(
 		buffer,
 		"Usage: %s"
+		" [--daemon|--no-daemon]"
+		" [--debug <level>]"
+		USAGE_DISPLAY_ARG
+		" [--name <screen-name>]"
 		" [--yscroll <delta>]"
-		WINAPI_ARG
-		HELP_COMMON_ARGS
+		" [--restart|--no-restart]"
 		" <server-address>"
 		"\n\n"
-		"Connect to a synergy mouse/keyboard sharing server.\n"
+		"Start the synergy mouse/keyboard sharing server.\n"
 		"\n"
-		HELP_COMMON_INFO_1
-		WINAPI_INFO
+		"  -d, --debug <level>      filter out log messages with priorty below level.\n"
+		"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
+		"                           DEBUG, DEBUG1, DEBUG2.\n"
+		USAGE_DISPLAY_INFO
+		"  -f, --no-daemon          run the client in the foreground.\n"
+		"*     --daemon             run the client as a daemon.\n"
+		"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
+		"                           ourself to the server.\n"
 		"      --yscroll <delta>    defines the vertical scrolling delta, which is\n"
-		HELP_COMMON_INFO_2
+		"                           120 by default.\n"
+		"  -1, --no-restart         do not try to restart the client if it fails for\n"
+		"                           some reason.\n"
+		"*     --restart            restart the client automatically if it fails.\n"
+		"  -l  --log <file>         write log messages to file.\n"
+		"  -h, --help               display this help and exit.\n"
+		"      --version            display version information and exit.\n"
 		"\n"
 		"* marks defaults.\n"
 		"\n"
 		"The server address is of the form: [<hostname>][:<port>].  The hostname\n"
 		"must be the address or hostname of the server.  The port overrides the\n"
-		"default port, %d.\n",
+		"default port, %d.\n"
+		"\n"
+		"Where log messages go depends on the platform and whether or not the\n"
+		"client is running as a daemon.",
 		args().m_pname, kDefaultPort
 		);
 
@@ -412,7 +441,8 @@ CClientApp::closeClient(CClient* client)
 int
 CClientApp::foregroundStartup(int argc, char** argv)
 {
-	initApp(argc, argv);
+	// parse command line
+	parseArgs(argc, argv);
 
 	// never daemonize
 	return mainLoop();
@@ -476,6 +506,17 @@ CClientApp::stopClient()
 int
 CClientApp::mainLoop()
 {
+	// logging to files
+	CFileLogOutputter* fileLog = NULL;
+
+	if (args().m_logFile != NULL) {
+		fileLog = new CFileLogOutputter(args().m_logFile);
+
+		CLOG->insert(fileLog);
+
+		LOG((CLOG_DEBUG1 "Logging to file (%s) enabled", args().m_logFile));
+	}
+
 	// create socket multiplexer.  this must happen after daemonization
 	// on unix because threads evaporate across a fork().
 	CSocketMultiplexer multiplexer;
@@ -483,8 +524,12 @@ CClientApp::mainLoop()
 	// create the event queue
 	CEventQueue eventQueue;
 
-	// start client, etc
-	ARCH->util().startNode();
+	// start the client.  if this return false then we've failed and
+	// we shouldn't retry.
+	LOG((CLOG_DEBUG1 "starting client"));
+	if (!startClient()) {
+		return kExitFailed;
+	}
 
 	// run event loop.  if startClient() failed we're supposed to retry
 	// later.  the timer installed by startClient() will take care of
@@ -505,6 +550,11 @@ CClientApp::mainLoop()
 	updateStatus();
 	LOG((CLOG_NOTE "stopped client"));
 
+	if (fileLog) {
+		CLOG->remove(fileLog);
+		delete fileLog;		
+	}
+
 	return kExitSuccess;
 }
 
@@ -518,7 +568,12 @@ daemonMainLoopStatic(int argc, const char** argv)
 int
 CClientApp::standardStartup(int argc, char** argv)
 {
-	initApp(argc, argv);
+	if (!args().m_daemon) {
+		ARCH->showConsole(false);
+	}
+
+	// parse command line
+	parseArgs(argc, argv);
 
 	// daemonize if requested
 	if (args().m_daemon) {
@@ -550,32 +605,12 @@ CClientApp::runInner(int argc, char** argv, ILogOutputter* outputter, StartupFun
 	// through the task bar.
 	s_taskBarReceiver = createTaskBarReceiver(logBuffer);
 
-	int result;
-	try
-	{
-		// run
-		result = startup(argc, argv);
-	}
-	catch (...)
-	{
-		// done with task bar receiver
-		delete s_taskBarReceiver;
+	// run
+	int result = startup(argc, argv);
 
-		delete args().m_serverAddress;
+	// done with task bar receiver
+	delete s_taskBarReceiver;
 
-		throw;
-	}
-
+	delete args().m_serverAddress;
 	return result;
-}
-
-void 
-CClientApp::startNode()
-{
-	// start the client.  if this return false then we've failed and
-	// we shouldn't retry.
-	LOG((CLOG_DEBUG1 "starting client"));
-	if (!startClient()) {
-		m_bye(kExitFailed);
-	}
 }

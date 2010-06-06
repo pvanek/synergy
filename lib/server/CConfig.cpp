@@ -20,6 +20,8 @@
 #include "stdistream.h"
 #include "stdostream.h"
 #include <cstdlib>
+#include "XSynergy.h"
+
 
 //
 // CConfig
@@ -377,14 +379,14 @@ CConfig::isValidScreenName(const CString& name) const
 		}
 
 		// check first and last characters
-		if (!(isalnum(name[b]) || name[b] == '_') ||
-			!(isalnum(name[e - 1]) || name[e - 1] == '_')) {
+		if (!(isalnum((unsigned char)name[b]) || name[b] == '_') ||
+			!(isalnum((unsigned char)name[e - 1]) || name[e - 1] == '_')) {
 			return false;
 		}
 
 		// check interior characters
 		for (CString::size_type i = b; i < e; ++i) {
-			if (!isalnum(name[i]) && name[i] != '_' && name[i] != '-') {
+			if (!isalnum((unsigned char)name[i]) && name[i] != '_' && name[i] != '-') {
 				return false;
 			}
 		}
@@ -620,7 +622,20 @@ CConfig::dirName(EDirection dir)
 
 	assert(dir >= kFirstDirection && dir <= kLastDirection);
 
-	return s_name[dir - kFirstDirection];
+	UInt32 index = dir - kFirstDirection;
+
+	bool indexInRange = index < (UInt32)(sizeof(s_name) / sizeof(s_name[0]));
+	assert(indexInRange);
+
+	// check to avoid compile warning
+	if (indexInRange) {
+		return s_name[index];
+	} else {
+		// this should never happen, because if a developer calls this function
+		// incorrectly then assert will set them straight. if this is built in
+		// release and we reach here, then the user is screwed!
+		return "";
+	}
 }
 
 CInputFilter*
@@ -1862,7 +1877,7 @@ CConfigReadContext::readLine(CString& line)
 		if (!line.empty()) {
 			// make sure there are no invalid characters
 			for (i = 0; i < line.length(); ++i) {
-				if (!isgraph(line[i]) && line[i] != ' ' && line[i] != '\t') {
+				if (!isgraph((unsigned char)line[i]) && line[i] != ' ' && line[i] != '\t') {
 					throw XConfigRead(*this,
 								"invalid character %{1}",
 								CStringUtil::print("%#2x", line[i]));

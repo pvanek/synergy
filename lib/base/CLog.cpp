@@ -169,9 +169,7 @@ CLog::print(const char* file, int line, const char* fmt, ...)
   }
 
   // print the prefix to the buffer.  leave space for priority label.
-  // do not prefix time and file for kPRINT (CLOG_PRINT)
-  if ((file != NULL) && (priority != kPRINT)) {
-
+  if (file != NULL) {
       char message[2048];
 	  struct tm *tm;
 	  char tmp[220];

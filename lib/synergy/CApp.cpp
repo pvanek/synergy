@@ -19,11 +19,8 @@
 #include "CArch.h"
 #include "XBase.h"
 #include "XArch.h"
-#if SYSAPI_WIN32
 #include "CArchMiscWindows.h"
-#endif
 #include "LogOutputters.h"
-#include "XSynergy.h"
 
 #include <iostream>
 #include <stdio.h>
@@ -46,13 +43,7 @@ CApp::~CApp()
 }
 
 CApp::CArgsBase::CArgsBase() :
-#if SYSAPI_WIN32
-m_daemon(false), // daemon mode not supported on windows (use --service)
-m_debugServiceWait(false),
-m_relaunchMode(false),
-#else
-m_daemon(true), // backward compatibility for unix (daemon by default)
-#endif
+m_daemon(true),
 m_backend(false),
 m_restartable(true),
 m_noHooks(false),
@@ -190,7 +181,8 @@ CApp::parseArgs(int argc, const char* const* argv, int& i)
 		}
 
 		else if (argv[i][0] == '-') {
-			std::cerr << "Unrecognized option: " << argv[i] << std::endl;
+			LOG((CLOG_PRINT "%s: unrecognized option `%s'" BYE,
+				argsBase().m_pname, argv[i], argsBase().m_pname));
 			m_bye(kExitArgs);
 		}
 
@@ -200,18 +192,11 @@ CApp::parseArgs(int argc, const char* const* argv, int& i)
 		}
 	}
 
-#if SYSAPI_WIN32
-	// suggest that user installs as a windows service. when launched as 
-	// service, process should automatically detect that it should run in
-	// daemon mode.
-	if (argsBase().m_daemon) {
-		LOG((CLOG_ERR 
-			"The --daemon argument is not supported on Windows. "
-			"Instead, install %s as a service (--service install).", 
-			argsBase().m_pname));
-		m_bye(kExitArgs);
+	// increase default filter level for daemon.  the user must
+	// explicitly request another level for a daemon.
+	if (argsBase().m_daemon && argsBase().m_logFilter == NULL) {
+		argsBase().m_logFilter = "NOTE";
 	}
-#endif
 }
 
 void
@@ -246,36 +231,34 @@ CApp::run(int argc, char** argv, CreateTaskBarReceiverFunc createTaskBarReceiver
 
 	// create an instance of log
 	CLOG;
-	
-	// HACK: fail by default (saves us setting result in each catch)
-	int result = kExitFailed;
 
+	int result;
 	try {
 		result = ARCH->run(argc, argv, createTaskBarReceiver);
 	}
-	catch (XExitApp& e) {
-		// instead of showing a nasty error, just exit with the error code.
-		// not sure if i like this behaviour, but it's probably better than 
-		// using the exit(int) function!
-		result = e.getCode();
-	}
 	catch (XBase& e) {
-		LOG((CLOG_CRIT "Exception: %s\n", e.what()));
+		LOG((CLOG_CRIT "Uncaught exception: %s\n", e.what()));
+		result = kExitFailed;
 	}
 	catch (XArch& e) {
-		LOG((CLOG_CRIT "Init failed: %s" BYE, e.what().c_str(), argsBase().m_pname));
+		LOG((CLOG_CRIT "Initialization failed: %s" BYE, e.what().c_str(), argsBase().m_pname));
+		result = kExitFailed;
 	}
 	catch (std::exception& e) {
-		LOG((CLOG_CRIT "Exception: %s\n", e.what()));
+		LOG((CLOG_CRIT "Uncaught exception: %s\n", e.what()));
+		result = kExitFailed;
 	}
 	catch (...) {
-		LOG((CLOG_CRIT "An unexpected exception occurred.\n"));
+		LOG((CLOG_CRIT "Uncaught exception: <unknown exception>\n"));
+		result = kExitFailed;
 	}
 
 	delete CLOG;
 
-	ARCH->beforeAppExit();
-	
+	// not sure i like what's going on here; m_bye could call exit, but it also does
+	// some other stuff - if we don't return then we get compiler warning (and it's 
+	// not good practice anyway), but the return will never get hit.
+	m_bye(result);
 	return result;
 }
 
@@ -288,38 +271,4 @@ CApp::daemonMainLoop(int, const char**)
 	CSystemLogger sysLogger(daemonName(), true);
 #endif
 	return mainLoop();
-}
-
-void 
-CApp::setupFileLogging()
-{
-	if (argsBase().m_logFile != NULL) {
-		m_fileLog = new CFileLogOutputter(argsBase().m_logFile);
-		CLOG->insert(m_fileLog);
-		LOG((CLOG_DEBUG1 "logging to file (%s) enabled", argsBase().m_logFile));
-	}
-}
-
-void 
-CApp::loggingFilterWarning()
-{
-	if (CLOG->getFilter() > CLOG->getConsoleMaxLevel()) {
-		if (argsBase().m_logFile == NULL) {
-			LOG((CLOG_WARN "log messages above %s are NOT sent to console (use file logging)", 
-				CLOG->getFilterName(CLOG->getConsoleMaxLevel())));
-		}
-	}
-}
-
-void 
-CApp::initApp(int argc, const char** argv)
-{
-	// parse command line
-	parseArgs(argc, argv);
-
-	// setup file logging after parsing args
-	setupFileLogging();
-
-	// load configuration
-	loadConfig();
 }

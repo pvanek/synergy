@@ -22,4 +22,8 @@ class CArchConsoleWindows : public CArchConsoleStd {
 public:
 	CArchConsoleWindows();
 	virtual ~CArchConsoleWindows();
+	virtual void openConsoleDelayed();
+	virtual void writeConsole(const char*);
+private:
+	bool m_consoleOpen;
 };

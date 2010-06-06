@@ -17,15 +17,9 @@
 #include "CArchAppUtil.h"
 #include "CString.h"
 
-#define WIN32_LEAN_AND_MEAN
 #include "Windows.h"
 
 #define ARCH_APPUTIL CArchAppUtilWindows
-
-enum AppExitMode {
-	kExitModeNormal,
-	kExitModeDaemon
-};
 
 class CArchAppUtilWindows : public CArchAppUtil {
 public:
@@ -51,24 +45,19 @@ public:
 	void handleServiceArg(const char* serviceAction);
 
 	bool parseArg(const int& argc, const char* const* argv, int& i);
+	
+	void adoptApp(CApp* app);
 
 	int daemonNTStartup(int, char**);
 	
 	int daemonNTMainLoop(int argc, const char** argv);
 
-	void debugServiceWait();
-
 	int run(int argc, char** argv, CreateTaskBarReceiverFunc createTaskBarReceiver);
 
-	void exitApp(int code);
-
-	void beforeAppExit();
+	static void byeThrow(int x);
 
 	static CArchAppUtilWindows& instance();
-
-	void startNode();
-
-private:
-	AppExitMode m_exitMode;
-	static BOOL WINAPI consoleHandler(DWORD CEvent);
 };
+
+// TODO: move to class
+void exitPause(int code);

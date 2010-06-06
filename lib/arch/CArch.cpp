@@ -670,9 +670,3 @@ CArch::run(int argc, char** argv, CreateTaskBarReceiverFunc createTaskBarReceive
 {
 	return m_appUtil->run(argc, argv, createTaskBarReceiver);
 }
-
-void
-CArch::beforeAppExit()
-{
-	m_appUtil->beforeAppExit();
-}

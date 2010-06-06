@@ -128,6 +128,15 @@ CServerApp::parseArgs(int argc, const char* const* argv)
 		m_bye(kExitArgs);
 	}
 
+#if SYSAPI_WIN32
+	// if user wants to run as daemon, but process not launched from service launcher...
+	if (args().m_daemon && !CArchMiscWindows::wasLaunchedAsService()) {
+		LOG((CLOG_ERR "cannot launch as daemon if process not started through "
+			"service host (use '--service start' argument instead)"));
+		m_bye(kExitArgs);
+	}
+#endif
+
 	// set log filter
 	if (!CLOG->setFilter(args().m_logFilter)) {
 		LOG((CLOG_PRINT "%s: unrecognized log level `%s'" BYE,
@@ -138,21 +147,50 @@ CServerApp::parseArgs(int argc, const char* const* argv)
 	// identify system
 	LOG((CLOG_INFO "%s Server on %s %s", kAppVersion, ARCH->getOSName().c_str(), ARCH->getPlatformName().c_str()));
 
-	loggingFilterWarning();
+#ifdef WIN32
+#ifdef _AMD64_
+	LOG((CLOG_WARN "This is an experimental x64 build of %s. Use it at your own risk.", kApplication));
+#endif
+#endif
+
+	if (CLOG->getFilter() > CLOG->getConsoleMaxLevel()) {
+		if (args().m_logFile == NULL) {
+			LOG((CLOG_WARN "log messages above %s are NOT sent to console (use file logging)", 
+				CLOG->getFilterName(CLOG->getConsoleMaxLevel())));
+		}
+	}
 }
 
 void
 CServerApp::help()
 {
-	// window api args (windows/x-windows/carbon)
 #if WINAPI_XWINDOWS
-#  define WINAPI_ARGS \
+#  define USAGE_DISPLAY_ARG		\
 	" [--display <display>]"
-#  define WINAPI_INFO \
+#  define USAGE_DISPLAY_INFO	\
 	"      --display <display>  connect to the X server at <display>\n"
 #else
-#  define WINAPI_ARGS
-#  define WINAPI_INFO
+#  define USAGE_DISPLAY_ARG
+#  define USAGE_DISPLAY_INFO
+#endif
+
+#if SYSAPI_WIN32
+
+#  define PLATFORM_ARGS														\
+	" [--daemon|--no-daemon]"
+#  define PLATFORM_DESC
+#  define PLATFORM_EXTRA													\
+	"At least one command line argument is required.  If you don't otherwise\n"	\
+	"need an argument use `--daemon'.\n"										\
+	"\n"
+
+#else
+
+#  define PLATFORM_ARGS														\
+	" [--daemon|--no-daemon]"
+#  define PLATFORM_DESC
+#  define PLATFORM_EXTRA
+
 #endif
 
 	char buffer[2000];
@@ -161,21 +199,35 @@ CServerApp::help()
 		"Usage: %s"
 		" [--address <address>]"
 		" [--config <pathname>]"
-		WINAPI_ARGS
-		HELP_SYS_ARGS
-		HELP_COMMON_ARGS
+		" [--debug <level>]"
+		USAGE_DISPLAY_ARG
+		" [--name <screen-name>]"
+		" [--restart|--no-restart]"
+		PLATFORM_ARGS
 		"\n\n"
 		"Start the synergy mouse/keyboard sharing server.\n"
 		"\n"
 		"  -a, --address <address>  listen for clients on the given address.\n"
 		"  -c, --config <pathname>  use the named configuration file instead.\n"
-		HELP_COMMON_INFO_1
-		WINAPI_INFO
-		HELP_SYS_INFO
-		HELP_COMMON_INFO_2
+		"  -d, --debug <level>      filter out log messages with priorty below level.\n"
+		"                           level may be: FATAL, ERROR, WARNING, NOTE, INFO,\n"
+		"                           DEBUG, DEBUG1, DEBUG2.\n"
+		USAGE_DISPLAY_INFO
+		"  -f, --no-daemon          run the server in the foreground.\n"
+		"*     --daemon             run the server as a daemon.\n"
+		"  -n, --name <screen-name> use screen-name instead the hostname to identify\n"
+		"                           this screen in the configuration.\n"
+		"  -1, --no-restart         do not try to restart the server if it fails for\n"
+		"                           some reason.\n"
+		"*     --restart            restart the server automatically if it fails.\n"
+		"  -l  --log <file>         write log messages to file.\n"
+		PLATFORM_DESC
+		"  -h, --help               display this help and exit.\n"
+		"      --version            display version information and exit.\n"
 		"\n"
 		"* marks defaults.\n"
 		"\n"
+		PLATFORM_EXTRA
 		"The argument for --address is of the form: [<hostname>][:<port>].  The\n"
 		"hostname must be the address or hostname of an interface on the system.\n"
 		"The default is to listen on all interfaces.  The port overrides the\n"
@@ -184,11 +236,16 @@ CServerApp::help()
 		"If no configuration file pathname is provided then the first of the\n"
 		"following to load successfully sets the configuration:\n"
 		"  %s\n"
-		"  %s\n",
+		"  %s\n"
+		"If no configuration file can be loaded then the configuration uses its\n"
+		"defaults with just the server screen.\n"
+		"\n"
+		"Where log messages go depends on the platform and whether or not the\n"
+		"server is running as a daemon.",
 		args().m_pname, kDefaultPort,
 		ARCH->concatPath(ARCH->getUserDirectory(), USR_CONFIG_NAME).c_str(),
 		ARCH->concatPath(ARCH->getSystemDirectory(), SYS_CONFIG_NAME).c_str()
-	);
+		);
 
 	std::cout << buffer << std::endl;
 }
@@ -717,6 +774,17 @@ int CServerApp::mainLoop()
 	// create the event queue
 	CEventQueue eventQueue;
 
+	// logging to files
+	CFileLogOutputter* fileLog = NULL;
+
+	if (args().m_logFile != NULL) {
+		fileLog = new CFileLogOutputter(args().m_logFile);
+
+		CLOG->insert(fileLog);
+
+		LOG((CLOG_DEBUG1 "Logging to file (%s) enabled", args().m_logFile));
+	}
+
 	// if configuration has no screens then add this system
 	// as the default
 	if (args().m_config->begin() == args().m_config->end()) {
@@ -740,8 +808,12 @@ int CServerApp::mainLoop()
 		return kExitFailed;
 	}
 
-	// start server, etc
-	ARCH->util().startNode();
+	// start the server.  if this return false then we've failed and
+	// we shouldn't retry.
+	LOG((CLOG_DEBUG1 "starting server"));
+	if (!startServer()) {
+		return kExitFailed;
+	}
 
 	// handle hangup signal by reloading the server's configuration
 	ARCH->setSignalHandler(CArch::kHANGUP, &reloadSignalHandler, NULL);
@@ -783,6 +855,11 @@ int CServerApp::mainLoop()
 	cleanupServer();
 	updateStatus();
 	LOG((CLOG_NOTE "stopped server"));
+
+	if (fileLog) {
+		CLOG->remove(fileLog);
+		delete fileLog;		
+	}
 
 	return kExitSuccess;
 }
@@ -835,7 +912,11 @@ int daemonMainLoopStatic(int argc, const char** argv) {
 int 
 CServerApp::standardStartup(int argc, char** argv)
 {
-	initApp(argc, argv);
+	// parse command line
+	parseArgs(argc, argv);
+
+	// load configuration
+	loadConfig();
 
 	// daemonize if requested
 	if (args().m_daemon) {
@@ -849,7 +930,11 @@ CServerApp::standardStartup(int argc, char** argv)
 int 
 CServerApp::foregroundStartup(int argc, char** argv)
 {
-	initApp(argc, argv);
+	// parse command line
+	parseArgs(argc, argv);
+
+	// load configuration
+	loadConfig();
 
 	// never daemonize
 	return mainLoop();
@@ -882,13 +967,3 @@ CServerApp::daemonInfo() const
 #endif
 }
 
-void
-CServerApp::startNode()
-{
-	// start the server.  if this return false then we've failed and
-	// we shouldn't retry.
-	LOG((CLOG_DEBUG1 "starting server"));
-	if (!startServer()) {
-		m_bye(kExitFailed);
-	}
-}

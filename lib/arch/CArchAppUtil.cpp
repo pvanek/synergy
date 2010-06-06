@@ -37,7 +37,6 @@ CArchAppUtil::parseArg(const int& argc, const char* const* argv, int& i)
 void
 CArchAppUtil::adoptApp(CApp* app)
 {
-	app->m_bye = &exitAppStatic;
 	m_app = app;
 }
 

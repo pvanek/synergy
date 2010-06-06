@@ -59,12 +59,6 @@ CMSWindowsClientTaskBarReceiver::CMSWindowsClientTaskBarReceiver(
 
 CMSWindowsClientTaskBarReceiver::~CMSWindowsClientTaskBarReceiver()
 {
-	cleanup();
-}
-
-void
-CMSWindowsClientTaskBarReceiver::cleanup()
-{
 	ARCH->removeReceiver(this);
 	for (UInt32 i = 0; i < kMaxState; ++i) {
 		deleteIcon(m_icon[i]);

@@ -57,7 +57,11 @@ public:
 	virtual void		close();
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
-	virtual void		flush();
+private:
+	void writeThread(void*);
+	CThread* m_writeThread;
+	std::list<CString> m_buffer;
+	bool m_threadCancel;
 };
 
 //! Write log to file
@@ -77,7 +81,7 @@ public:
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
 private:
-	std::string m_fileName;
+	std::ofstream		m_handle;
 };
 
 //! Write log to system log

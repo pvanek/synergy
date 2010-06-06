@@ -44,6 +44,7 @@ MainWindow::MainWindow(QWidget* parent) :
 	m_ServerConfig(&m_Settings, 5, 3),
 	m_pTempConfigFile(NULL),
 	m_pLogDialog(new LogDialog(this, synergyProcess())),
+	m_pLabelStatusBar(NULL),
 	m_pTrayIcon(NULL),
 	m_pTrayIconMenu(NULL)
 {
@@ -51,11 +52,9 @@ MainWindow::MainWindow(QWidget* parent) :
 
 	createTrayIcon();
 	createMenuBar();
+	createStatusBar();
 	loadSettings();
 	initConnections();
-
-	// HACK - surely window should be visible by default?
-	setVisible(true);
 
 	if (appConfig().autoConnect())
 		startSynergy();
@@ -65,11 +64,6 @@ MainWindow::~MainWindow()
 {
 	stopSynergy();
 	saveSettings();
-}
-
-void MainWindow::setStatus(const QString &status)
-{
-	m_pStatusLabel->setText(status);
 }
 
 void MainWindow::createTrayIcon()
@@ -129,12 +123,24 @@ void MainWindow::createMenuBar()
 	setMenuBar(menubar);
 }
 
+void MainWindow::createStatusBar()
+{
+	m_pLabelStatusBar = new QLabel(tr("Synergy is not running."));
+	statusBar()->addPermanentWidget(m_pLabelStatusBar);
+}
+
 void MainWindow::loadSettings()
 {
 	// gui
 	QRect rect = settings().value("windowGeometry", geometry()).toRect();
 	move(rect.x(), rect.y());
 	resize(rect.width(), rect.height());
+
+#if !defined(Q_OS_MAC)
+	setVisible(settings().value("windowVisible", true).toBool());
+#else
+	setVisible(true);
+#endif
 
 	// program settings
 
@@ -183,6 +189,11 @@ void MainWindow::saveSettings()
 
 void MainWindow::setIcon(qSynergyState state)
 {
+#if defined(Q_OS_WIN)
+	setVisible(state == synergyDisconnected);
+	m_pTrayIcon->setVisible(state == synergyDisconnected);
+#endif
+
 	QIcon icon;
 	icon.addFile(synergyIconFiles[state]);
 
@@ -213,7 +224,7 @@ void MainWindow::startSynergy()
 	setSynergyProcess(new QProcess(this));
 
 	if ((synergyType() == synergyClient && !clientArgs(args, app))
-			|| (synergyType() == synergyServer && !serverArgs(args, app)))
+			|| synergyType() == synergyServer && !serverArgs(args, app))
 	{
 		stopSynergy();
 		return;
@@ -357,22 +368,22 @@ void MainWindow::setSynergyState(qSynergyState state)
 
 	if (state == synergyConnected)
 	{
-		disconnect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
-		connect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
-		m_pButtonToggleStart->setText(tr("&Stop"));
+		disconnect (m_pButtonStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
+		connect (m_pButtonStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
+		m_pButtonStart->setText(tr("&Stop"));
 	}
 	else
 	{
-		disconnect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
-		connect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
-		m_pButtonToggleStart->setText(tr("&Start"));
+		disconnect (m_pButtonStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
+		connect (m_pButtonStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
+		m_pButtonStart->setText(tr("&Start"));
 	}
 
 	m_pGroupClient->setEnabled(state == synergyDisconnected);
 	m_pGroupServer->setEnabled(state == synergyDisconnected);
 	m_pActionStartSynergy->setEnabled(state == synergyDisconnected);
 	m_pActionStopSynergy->setEnabled(state == synergyConnected);
-	setStatus(state == synergyConnected ? QString(tr("Synergy %1 is running.")).arg(synergyType() == synergyServer ? tr("server") : tr("client")) : tr("Synergy is not running."));
+	m_pLabelStatusBar->setText(state == synergyConnected ? QString(tr("Synergy %1 is running.")).arg(synergyType() == synergyServer ? tr("server") : tr("client")) : tr("Synergy is not running."));
 	setIcon(state);
 	m_SynergyState = state;
 }

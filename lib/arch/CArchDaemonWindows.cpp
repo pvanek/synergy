@@ -615,14 +615,13 @@ CArchDaemonWindows::serviceMain(DWORD argc, LPTSTR* argvIn)
 	m_serviceState = SERVICE_START_PENDING;
 	setStatus(m_serviceState, 0, 10000);
 
-	std::string commandLine;
-
 	// if no arguments supplied then try getting them from the registry.
 	// the first argument doesn't count because it's the service name.
 	Arguments args;
 	ArgList myArgv;
 	if (argc <= 1) {
 		// read command line
+		std::string commandLine;
 		HKEY key = openNTServicesKey();
 		key      = CArchMiscWindows::openKey(key, argvIn[0]);
 		key      = CArchMiscWindows::openKey(key, _T("Parameters"));
@@ -686,8 +685,6 @@ CArchDaemonWindows::serviceMain(DWORD argc, LPTSTR* argvIn)
 		}
 	}
 
-	m_commandLine = commandLine;
-
 	try {
 		// invoke daemon function
 		m_daemonResult = m_daemonFunc(static_cast<int>(argc), argv);
@@ -704,10 +701,6 @@ CArchDaemonWindows::serviceMain(DWORD argc, LPTSTR* argvIn)
 	// clean up
 	ARCH->closeCondVar(m_serviceCondVar);
 	ARCH->closeMutex(m_serviceMutex);
-
-	// we're going to exit now, so set status to stopped
-	m_serviceState = SERVICE_STOPPED;
-	setStatus(m_serviceState, 0, 10000);
 }
 
 void WINAPI

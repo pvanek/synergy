@@ -15,7 +15,6 @@
 #pragma once
 
 #include "IArchAppUtil.h"
-#include "XSynergy.h"
 
 class CArchAppUtil : public IArchAppUtil {
 public:
@@ -25,11 +24,8 @@ public:
 	virtual bool parseArg(const int& argc, const char* const* argv, int& i);
 	virtual void adoptApp(CApp* app);
 	CApp& app() const;
-	virtual void exitApp(int code) { throw XExitApp(code); }
 
 	static CArchAppUtil& instance();
-	static void exitAppStatic(int code) { instance().exitApp(code); }
-	virtual void beforeAppExit() {}
 	
 private:
 	CApp* m_app;

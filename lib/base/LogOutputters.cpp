@@ -60,12 +60,19 @@ CStopLogOutputter::write(ELevel, const char*)
 // CConsoleLogOutputter
 //
 
-CConsoleLogOutputter::CConsoleLogOutputter()
+CConsoleLogOutputter::CConsoleLogOutputter() :
+m_threadCancel(false)
 {
+	m_writeThread = new CThread(new TMethodJob<CConsoleLogOutputter>(
+		this, &CConsoleLogOutputter::writeThread));
 }
 
 CConsoleLogOutputter::~CConsoleLogOutputter()
 {
+	// queue cancel and wait for 3 seconds, then give up and delete
+	m_threadCancel = true;
+	m_writeThread->wait();
+	delete m_writeThread;
 }
 
 void
@@ -89,14 +96,39 @@ CConsoleLogOutputter::show(bool showIfEmpty)
 bool
 CConsoleLogOutputter::write(ELevel level, const char* msg)
 {
-	ARCH->writeConsole(msg);
-	return true; // wtf?
+	// we want to ignore messages above CLOG->getConsoleMaxLevel(), since
+	// the console can use a lot of CPU time to display messages, and on windows
+	// this is done on the same thread.
+	if (level <= CLOG->getConsoleMaxLevel()) {
+		m_buffer.push_back(msg);
+	}
+	return true;
 }
 
+// in case our console is cpu hungry, buffer the log messages and dequeue 
+// asynchronously in another thread. this way, if we hammer the console, 
+// it won't cause the mouse to stutter.
 void
-CConsoleLogOutputter::flush()
+CConsoleLogOutputter::writeThread(void*)
 {
+	// keep writing until it's safe to stop
+	bool stop = false;
+	while(!stop) {
 
+		if (m_buffer.empty()) {
+
+			// wait for some messages
+			ARCH->sleep(.1);
+			continue;
+		}
+
+		CString &s = m_buffer.front();
+		ARCH->writeConsole(s.c_str());
+		m_buffer.pop_front();
+
+		// only cancel writer if all messages have been sent
+		stop = m_buffer.empty() && m_threadCancel;
+	}
 }
 
 
@@ -252,25 +284,30 @@ CBufferedLogOutputter::write(ELevel, const char* message)
 // CFileLogOutputter
 //
 
-CFileLogOutputter::CFileLogOutputter(const char* logFile)
+CFileLogOutputter::CFileLogOutputter(const char * logFile)
 {
 	assert(logFile != NULL);
-	m_fileName = logFile;
+
+	m_handle.open(logFile, std::fstream::app);
+	// open file handle
 }
 
 CFileLogOutputter::~CFileLogOutputter()
 {
+	// close file handle
+	if (m_handle.is_open())
+		m_handle.close();
 }
 
 bool
 CFileLogOutputter::write(ILogOutputter::ELevel level, const char *message)
 {
-	std::ofstream m_handle;
-	m_handle.open(m_fileName.c_str(), std::fstream::app);
 	if (m_handle.is_open() && m_handle.fail() != true) {
 		m_handle << message << std::endl;
+		
+		// write buffer to file
+		m_handle.flush();
 	}
-	m_handle.close();
 
 	return true;
 }
