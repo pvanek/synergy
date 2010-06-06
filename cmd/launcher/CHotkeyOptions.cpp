@@ -13,7 +13,6 @@
  */
 
 #include "CArchMiscWindows.h"
-#include "CMSWindowsKeyState.h"
 #include "CConfig.h"
 #include "CHotkeyOptions.h"
 #include "CStringUtil.h"
@@ -385,17 +384,43 @@ CHotkeyOptions::closeRule(HWND)
 
 			// expand
 			if (keyAction != NULL) {
-				const IPlatformScreen::CKeyInfo* oldInfo =
-					keyAction->getInfo();
-				IPlatformScreen::CKeyInfo* newInfo =
-					IKeyState::CKeyInfo::alloc(*oldInfo);
-				CInputFilter::CKeystrokeAction* downAction =
-					new CInputFilter::CKeystrokeAction(newInfo, true);
-				newInfo = IKeyState::CKeyInfo::alloc(*oldInfo);
-				CInputFilter::CKeystrokeAction* upAction =
-					new CInputFilter::CKeystrokeAction(newInfo, false);
-				m_activeRule.replaceAction(downAction, true, i);
-				m_activeRule.adoptAction(upAction, false);
+
+				// declare all before hand so we can delete on exception
+				const IPlatformScreen::CKeyInfo* oldInfo = NULL;
+				IPlatformScreen::CKeyInfo* newInfo = NULL;
+				CInputFilter::CKeystrokeAction* downAction = NULL;
+				CInputFilter::CKeystrokeAction* upAction = NULL;
+
+				try {
+					oldInfo = keyAction->getInfo();
+					newInfo = IKeyState::CKeyInfo::alloc(*oldInfo);
+					downAction = new CInputFilter::CKeystrokeAction(newInfo, true);
+					upAction = new CInputFilter::CKeystrokeAction(newInfo, false);
+
+					// call order may matter here, so we'll keep these together
+					m_activeRule.replaceAction(downAction, true, i);
+					m_activeRule.adoptAction(upAction, false);
+
+				} catch (...) {
+
+					if (oldInfo != NULL) {
+						delete oldInfo;
+					}
+
+					if (newInfo != NULL) {
+						delete newInfo;
+					}
+
+					if (downAction != NULL) {
+						delete downAction;
+					}
+
+					if (upAction != NULL) {
+						delete upAction;
+					}
+					
+					throw;
+				}
 			}
 			else if (mouseAction != NULL) {
 				const IPlatformScreen::CButtonInfo* oldInfo =
@@ -671,35 +696,35 @@ CHotkeyOptions::CConditionDialog::onKey(HWND hwnd, WPARAM wParam, LPARAM lParam)
 		}
 		// fall through
 
-	default:
-		key = CMSWindowsKeyState::getKeyID((UINT)wParam,
-						static_cast<KeyButton>((lParam & 0x1ff0000u) >> 16));
-		switch (key) {
-		case kKeyNone:
-			// could be a character
-			key = getChar(wParam, lParam);
-			if (key == kKeyNone) {
-				return;
-			}
-			break;
-
-		case kKeyShift_L:
-		case kKeyShift_R:
-		case kKeyControl_L:
-		case kKeyControl_R:
-		case kKeyAlt_L:
-		case kKeyAlt_R:
-		case kKeyMeta_L:
-		case kKeyMeta_R:
-		case kKeySuper_L:
-		case kKeySuper_R:
-		case kKeyCapsLock:
-		case kKeyNumLock:
-		case kKeyScrollLock:
-			// bogus
-			return;
-		}
-		break;
+//	default:
+//		key = CMSWindowsKeyState::getKeyID((UINT)wParam,
+//						static_cast<KeyButton>((lParam & 0x1ff0000u) >> 16));
+//		switch (key) {
+//		case kKeyNone:
+//			// could be a character
+//			key = getChar(wParam, lParam);
+//			if (key == kKeyNone) {
+//				return;
+//			}
+//			break;
+//
+//		case kKeyShift_L:
+//		case kKeyShift_R:
+//		case kKeyControl_L:
+//		case kKeyControl_R:
+//		case kKeyAlt_L:
+//		case kKeyAlt_R:
+//		case kKeyMeta_L:
+//		case kKeyMeta_R:
+////		case kKeySuper_L:
+////		case kKeySuper_R:
+//		case kKeyCapsLock:
+//		case kKeyNumLock:
+//		case kKeyScrollLock:
+//			// bogus
+//			return;
+//		}
+//		break;
 	}
 
 	delete s_condition;
@@ -1248,35 +1273,35 @@ CHotkeyOptions::CActionDialog::onKey(HWND hwnd, WPARAM wParam, LPARAM lParam)
 		}
 		// fall through
 
-	default:
-		key = CMSWindowsKeyState::getKeyID((UINT)wParam,
-						static_cast<KeyButton>((lParam & 0x1ff0000u) >> 16));
-		switch (key) {
-		case kKeyNone:
-			// could be a character
-			key = getChar(wParam, lParam);
-			if (key == kKeyNone) {
-				return;
-			}
-			break;
-
-		case kKeyShift_L:
-		case kKeyShift_R:
-		case kKeyControl_L:
-		case kKeyControl_R:
-		case kKeyAlt_L:
-		case kKeyAlt_R:
-		case kKeyMeta_L:
-		case kKeyMeta_R:
-		case kKeySuper_L:
-		case kKeySuper_R:
-		case kKeyCapsLock:
-		case kKeyNumLock:
-		case kKeyScrollLock:
-			// bogus
-			return;
-		}
-		break;
+//	default:
+//		key = CMSWindowsKeyState::getKeyID((UINT)wParam,
+//						static_cast<KeyButton>((lParam & 0x1ff0000u) >> 16));
+//		switch (key) {
+//		case kKeyNone:
+//			// could be a character
+//			key = getChar(wParam, lParam);
+//			if (key == kKeyNone) {
+//				return;
+//			}
+//			break;
+//
+//		case kKeyShift_L:
+//		case kKeyShift_R:
+//		case kKeyControl_L:
+//		case kKeyControl_R:
+//		case kKeyAlt_L:
+//		case kKeyAlt_R:
+//		case kKeyMeta_L:
+//		case kKeyMeta_R:
+////		case kKeySuper_L:
+////		case kKeySuper_R:
+//		case kKeyCapsLock:
+//		case kKeyNumLock:
+//		case kKeyScrollLock:
+//			// bogus
+//			return;
+//		}
+//		break;
 	}
 
 	// get old screen list

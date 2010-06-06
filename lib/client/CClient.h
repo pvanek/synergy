@@ -18,7 +18,6 @@
 #include "IClient.h"
 #include "IClipboard.h"
 #include "CNetworkAddress.h"
-#include "INode.h"
 
 class CEventQueueTimer;
 class CScreen;
@@ -32,7 +31,7 @@ class IStreamFilterFactory;
 /*!
 This class implements the top-level client algorithms for synergy.
 */
-class CClient : public IClient, public INode {
+class CClient : public IClient {
 public:
 	class CFailInfo {
 	public:

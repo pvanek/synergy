@@ -86,7 +86,6 @@ class MainWindow : public QMainWindow, public Ui::MainWindowBase
 		bool checkForApp(int which, QString& app);
 		bool clientArgs(QStringList& args, QString& app);
 		bool serverArgs(QStringList& args, QString& app);
-		void setStatus(const QString& status);
 
 	private:
 		QSettings m_Settings;
@@ -97,6 +96,7 @@ class MainWindow : public QMainWindow, public Ui::MainWindowBase
 		QTemporaryFile* m_pTempConfigFile;
 		LogDialog* m_pLogDialog;
 
+		QLabel* m_pLabelStatusBar;
 		QSystemTrayIcon* m_pTrayIcon;
 		QMenu* m_pTrayIconMenu;
 };

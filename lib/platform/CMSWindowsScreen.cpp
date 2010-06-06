@@ -16,7 +16,6 @@
 #include "CMSWindowsClipboard.h"
 #include "CMSWindowsDesks.h"
 #include "CMSWindowsEventQueueBuffer.h"
-#include "CMSWindowsKeyState.h"
 #include "CMSWindowsScreenSaver.h"
 #include "CClipboard.h"
 #include "CKeyMap.h"
@@ -80,7 +79,6 @@ CMSWindowsScreen*		CMSWindowsScreen::s_screen   = NULL;
 CMSWindowsScreen::CMSWindowsScreen(bool isPrimary, bool noHooks) :
 	m_isPrimary(isPrimary),
 	m_noHooks(noHooks),
-	m_is95Family(CArchMiscWindows::isWindows95Family()),
 	m_isOnScreen(m_isPrimary),
 	m_class(0),
 	m_x(0), m_y(0),
@@ -92,7 +90,6 @@ CMSWindowsScreen::CMSWindowsScreen(bool isPrimary, bool noHooks) :
 	m_mark(0),
 	m_markReceived(0),
 	m_fixTimer(NULL),
-	m_keyLayout(NULL),
 	m_screensaver(NULL),
 	m_screensaverNotify(false),
 	m_screensaverActive(false),
@@ -106,7 +103,6 @@ CMSWindowsScreen::CMSWindowsScreen(bool isPrimary, bool noHooks) :
 	m_setSides(NULL),
 	m_setZone(NULL),
 	m_setMode(NULL),
-	m_keyState(NULL),
 	m_hasMouse(GetSystemMetrics(SM_MOUSEPRESENT) != 0),
 	m_showingMouse(false)
 {
@@ -124,7 +120,6 @@ CMSWindowsScreen::CMSWindowsScreen(bool isPrimary, bool noHooks) :
 							m_hookLibrary, m_screensaver,
 							new TMethodJob<CMSWindowsScreen>(this,
 								&CMSWindowsScreen::updateKeysCB));
-		m_keyState    = new CMSWindowsKeyState(m_desks, getEventTarget());
 		updateScreenShape();
 		m_class       = createWindowClass();
 		m_window      = createWindow(m_class, "Synergy");
@@ -133,7 +128,6 @@ CMSWindowsScreen::CMSWindowsScreen(bool isPrimary, bool noHooks) :
 		LOG((CLOG_DEBUG "window is 0x%08x", m_window));
 	}
 	catch (...) {
-		delete m_keyState;
 		delete m_desks;
 		delete m_screensaver;
 		destroyWindow(m_window);
@@ -159,7 +153,6 @@ CMSWindowsScreen::~CMSWindowsScreen()
 	disable();
 	EVENTQUEUE->adoptBuffer(NULL);
 	EVENTQUEUE->removeHandler(CEvent::kSystem, IEventQueue::getSystemTarget());
-	delete m_keyState;
 	delete m_desks;
 	delete m_screensaver;
 	destroyWindow(m_window);
@@ -234,9 +227,6 @@ CMSWindowsScreen::disable()
 							CArchMiscWindows::kDISPLAY);
 	}
 
-	// tell key state
-	m_keyState->disable();
-
 	// stop snooping the clipboard
 	ChangeClipboardChain(m_window, m_nextClipboardWindow);
 	m_nextClipboardWindow = NULL;
@@ -289,13 +279,9 @@ CMSWindowsScreen::leave()
 	// keyboard layout for translating keys sent to clients.
 	HWND window  = GetForegroundWindow();
 	DWORD thread = GetWindowThreadProcessId(window, NULL);
-	m_keyLayout  = GetKeyboardLayout(thread);
-
-	// tell the key mapper about the keyboard layout
-	m_keyState->setKeyLayout(m_keyLayout);
 
 	// tell desk that we're leaving and tell it the keyboard layout
-	m_desks->leave(m_keyLayout);
+	m_desks->leave();
 
 	if (m_isPrimary) {
 
@@ -308,10 +294,6 @@ CMSWindowsScreen::leave()
 
 		// all messages prior to now are invalid
 		nextMark();
-
-		// remember the modifier state.  this is the modifier state
-		// reflected in the internal keyboard state.
-		m_keyState->saveModifiers();
 
 		// capture events
 		m_setMode(kHOOK_RELAY_EVENTS);
@@ -525,7 +507,7 @@ CMSWindowsScreen::registerHotKey(KeyID key, KeyModifierMask mask)
 	if ((mask & KeyModifierSuper) != 0) {
 		modifiers |= MOD_WIN;
 	}
-	UINT vk = m_keyState->mapKeyToVirtualKey(key);
+	UINT vk = 0; //m_keyState->mapKeyToVirtualKey(key);
 	if (key != kKeyNone && vk == 0) {
 		// can't map key
 		LOG((CLOG_WARN "could not map hotkey id=%04x mask=%04x", key, mask));
@@ -604,9 +586,6 @@ CMSWindowsScreen::fakeInputBegin()
 {
 	assert(m_isPrimary);
 
-	if (!m_isOnScreen) {
-		m_keyState->useSavedModifiers(true);
-	}
 	m_desks->fakeInputBegin();
 }
 
@@ -616,9 +595,7 @@ CMSWindowsScreen::fakeInputEnd()
 	assert(m_isPrimary);
 
 	m_desks->fakeInputEnd();
-	if (!m_isOnScreen) {
-		m_keyState->useSavedModifiers(false);
-	}
+	
 }
 
 SInt32
@@ -767,9 +744,21 @@ CMSWindowsScreen::createBlankCursor() const
 	int ch = GetSystemMetrics(SM_CYCURSOR);
 
 	UInt8* cursorAND = new UInt8[ch * ((cw + 31) >> 2)];
+	try {
+		memset(cursorAND, 0xff, ch * ((cw + 31) >> 2));
+	} catch(std::bad_alloc &ex) {
+		delete[] cursorAND;
+		throw ex;
+	}
+
 	UInt8* cursorXOR = new UInt8[ch * ((cw + 31) >> 2)];
-	memset(cursorAND, 0xff, ch * ((cw + 31) >> 2));
-	memset(cursorXOR, 0x00, ch * ((cw + 31) >> 2));
+	try {
+		memset(cursorXOR, 0x00, ch * ((cw + 31) >> 2));
+	} catch(std::bad_alloc &ex) {
+		delete[] cursorXOR;
+		throw ex;
+	}
+
 	HCURSOR c = CreateCursor(s_instance, 0, 0, cw, ch, cursorAND, cursorXOR);
 	delete[] cursorXOR;
 	delete[] cursorAND;
@@ -862,36 +851,20 @@ void
 CMSWindowsScreen::handleSystemEvent(const CEvent& event, void*)
 {
 	MSG* msg = reinterpret_cast<MSG*>(event.getData());
-	assert(msg != NULL);
+	assert(msg);
 
-	if (CArchMiscWindows::processDialog(msg)) {
-		return;
+	// check to avoid compile warning
+	if (msg) {
+
+		if (CArchMiscWindows::processDialog(msg)) {
+			return;
+		}
+		if (onPreDispatch(msg->hwnd, msg->message, msg->wParam, msg->lParam)) {
+			return;
+		}
+		TranslateMessage(msg);
+		DispatchMessage(msg);
 	}
-	if (onPreDispatch(msg->hwnd, msg->message, msg->wParam, msg->lParam)) {
-		return;
-	}
-	TranslateMessage(msg);
-	DispatchMessage(msg);
-}
-
-void
-CMSWindowsScreen::updateButtons()
-{
-	int numButtons               = GetSystemMetrics(SM_CMOUSEBUTTONS);
-	m_buttons[kButtonNone]       = false;
-	m_buttons[kButtonLeft]       = (GetKeyState(VK_LBUTTON)  < 0);
-	m_buttons[kButtonRight]      = (GetKeyState(VK_RBUTTON)  < 0);
-	m_buttons[kButtonMiddle]     = (GetKeyState(VK_MBUTTON)  < 0);
-	m_buttons[kButtonExtra0 + 0] = (numButtons >= 4) &&
-								   (GetKeyState(VK_XBUTTON1) < 0);
-	m_buttons[kButtonExtra0 + 1] = (numButtons >= 5) &&
-								   (GetKeyState(VK_XBUTTON2) < 0);
-}
-
-IKeyState*
-CMSWindowsScreen::getKeyState() const
-{
-	return m_keyState;
 }
 
 bool
@@ -979,19 +952,9 @@ CMSWindowsScreen::onEvent(HWND, UINT msg,
 {
 	switch (msg) {
 	case WM_QUERYENDSESSION:
-		if (m_is95Family) {
-			*result = TRUE;
-			return true;
-		}
 		break;
 
 	case WM_ENDSESSION:
-		if (m_is95Family) {
-			if (wParam == TRUE && lParam == 0) {
-				EVENTQUEUE->addEvent(CEvent(CEvent::kQuit));
-			}
-			return true;
-		}
 		break;
 
 	case WM_DRAWCLIPBOARD:
@@ -1070,17 +1033,22 @@ CMSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
 	bool wasDown             = isKeyDown(button);
 	KeyModifierMask oldState = pollActiveModifiers();
 
+	
 	// check for autorepeat
-	if (m_keyState->testAutoRepeat(down, (lParam & 0x40000000u) == 1, button)) {
+	// TODO: solve this because I removed it only to compile the code after  the big cleanup
+	/*
+	if (testAutoRepeat(down, (lParam & 0x40000000u) == 1, button)) {
 		lParam |= 0x40000000u;
-	}
+	}*/
 
+	// TODO: fix me first!!
+/*
 	// if the button is zero then guess what the button should be.
 	// these are badly synthesized key events and logitech software
 	// that maps mouse buttons to keys is known to do this.
 	// alternatively, we could just throw these events out.
 	if (button == 0) {
-		button = m_keyState->virtualKeyToButton(wParam & 0xffu);
+		button = 0 //m_keyState->virtualKeyToButton(wParam & 0xffu);
 		if (button == 0) {
 			return true;
 		}
@@ -1154,37 +1122,6 @@ CMSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
 		KeyID key = m_keyState->mapKeyFromEvent(wParam, lParam, &mask);
 		button    = static_cast<KeyButton>((lParam & 0x01ff0000u) >> 16);
 		if (key != kKeyNone) {
-			// fix key up.  if the key isn't down according to
-			// our table then we never got the key press event
-			// for it.  if it's not a modifier key then we'll
-			// synthesize the press first.  only do this on
-			// the windows 95 family, which eats certain special
-			// keys like alt+tab, ctrl+esc, etc.
-			if (m_is95Family && !wasDown && !down) {
-				switch (virtKey) {
-				case VK_SHIFT:
-				case VK_LSHIFT:
-				case VK_RSHIFT:
-				case VK_CONTROL:
-				case VK_LCONTROL:
-				case VK_RCONTROL:
-				case VK_MENU:
-				case VK_LMENU:
-				case VK_RMENU:
-				case VK_LWIN:
-				case VK_RWIN:
-				case VK_CAPITAL:
-				case VK_NUMLOCK:
-				case VK_SCROLL:
-					break;
-
-				default:
-					m_keyState->sendKeyEvent(getEventTarget(),
-							true, false, key, mask, 1, button);
-					break;
-				}
-			}
-
 			// do it
 			m_keyState->sendKeyEvent(getEventTarget(),
 							((lParam & 0x80000000u) == 0),
@@ -1195,7 +1132,7 @@ CMSWindowsScreen::onKey(WPARAM wParam, LPARAM lParam)
 			LOG((CLOG_DEBUG1 "cannot map key"));
 		}
 	}
-
+*/
 	return true;
 }
 
@@ -1265,7 +1202,7 @@ CMSWindowsScreen::onMouseButton(WPARAM wParam, LPARAM lParam)
 
 	// ignore message if posted prior to last mark change
 	if (!ignore()) {
-		KeyModifierMask mask = m_keyState->getActiveModifiers();
+		KeyModifierMask mask = 0; // m_keyState->getActiveModifiers();
 		if (pressed) {
 			LOG((CLOG_DEBUG1 "event: button press button=%d", button));
 			if (button != kButtonNone) {
@@ -1549,12 +1486,7 @@ void
 CMSWindowsScreen::handleFixes(const CEvent&, void*)
 {
 	// fix clipboard chain
-	fixClipboardViewer();
-
-	// update keys if keyboard layouts have changed
-	if (m_keyState->didGroupsChange()) {
-		updateKeys();
-	}
+	fixClipboardViewer();	
 }
 
 void
@@ -1576,16 +1508,7 @@ CMSWindowsScreen::fixClipboardViewer()
 
 void
 CMSWindowsScreen::enableSpecialKeys(bool enable) const
-{
-	// enable/disable ctrl+alt+del, alt+tab, etc on win95 family.
-	// since the win95 family doesn't support low-level hooks, we
-	// use this undocumented feature to suppress normal handling
-	// of certain key combinations.
-	if (m_is95Family) {
-		DWORD dummy = 0;
-		SystemParametersInfo(SPI_SETSCREENSAVERRUNNING,
-							enable ? FALSE : TRUE, &dummy, 0);
-	}
+{	
 }
 
 ButtonID
@@ -1680,39 +1603,6 @@ CMSWindowsScreen::mapPressFromEvent(WPARAM msg, LPARAM) const
 }
 
 void
-CMSWindowsScreen::updateKeysCB(void*)
-{
-	// record which keys we think are down
-	bool down[IKeyState::kNumButtons];
-	bool sendFixes = (isPrimary() && !m_isOnScreen);
-	if (sendFixes) {
-		for (KeyButton i = 0; i < IKeyState::kNumButtons; ++i) {
-			down[i] = m_keyState->isKeyDown(i);
-		}
-	}
-
-	// update layouts if necessary
-	if (m_keyState->didGroupsChange()) {
-		CPlatformScreen::updateKeyMap();
-	}
-
-	// now update the keyboard state
-	CPlatformScreen::updateKeyState();
-
-	// now see which keys we thought were down but now think are up.
-	// send key releases for these keys to the active client.
-	if (sendFixes) {
-		KeyModifierMask mask = pollActiveModifiers();
-		for (KeyButton i = 0; i < IKeyState::kNumButtons; ++i) {
-			if (down[i] && !m_keyState->isKeyDown(i)) {
-				m_keyState->sendKeyEvent(getEventTarget(),
-							false, false, kKeyNone, mask, 1, i);
-			}
-		}
-	}
-}
-
-void
 CMSWindowsScreen::forceShowCursor()
 {
 	// check for mouse
@@ -1752,12 +1642,6 @@ CMSWindowsScreen::updateForceShowCursor()
 
 	// turn on MouseKeys
 	m_mouseKeys.dwFlags = MKF_AVAILABLE | MKF_MOUSEKEYSON;
-
-	// make sure MouseKeys is active in whatever state the NumLock is
-	// not currently in.
-	if ((m_keyState->getActiveModifiers() & KeyModifierNumLock) != 0) {
-		m_mouseKeys.dwFlags |= MKF_REPLACENUMBERS;
-	}
 
 	// update MouseKeys
 	if (oldFlags != m_mouseKeys.dwFlags) {

@@ -20,6 +20,6 @@
 
 class CArchConsoleUnix : public CArchConsoleStd {
 public:
-	CArchConsoleUnix();
+	CArchConsoleUnix(void*);
 	virtual ~CArchConsoleUnix();
 };

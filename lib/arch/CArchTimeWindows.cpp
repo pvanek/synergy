@@ -29,6 +29,7 @@
 #include "CArchTimeWindows.h"
 #include <windows.h>
 #include <mmsystem.h>
+#include <exception>
 
 typedef WINMMAPI DWORD (WINAPI *PTimeGetTime)(void);
 
@@ -62,7 +63,10 @@ CArchTimeWindows::~CArchTimeWindows()
 {
 	s_freq = 0.0;
 	if (s_mmInstance == NULL) {
-		FreeLibrary(reinterpret_cast<HMODULE>(s_mmInstance));
+		HMODULE hLibModule = reinterpret_cast<HMODULE>(s_mmInstance);
+		if (hLibModule) {
+			FreeLibrary(hLibModule);
+		}
 		s_tgt        = NULL;
 		s_mmInstance = NULL;
 	}

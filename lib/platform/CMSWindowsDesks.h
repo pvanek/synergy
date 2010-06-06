@@ -91,7 +91,7 @@ public:
 	/*!
 	Prepares a desk for when the cursor leaves it.
 	*/
-	void				leave(HKL keyLayout);
+	void				leave();
 
 	//! Notify of options changes
 	/*!
@@ -243,9 +243,6 @@ private:
 
 	// true if hooks are not to be installed (useful for debugging)
 	bool				m_noHooks;
-
-	// true if windows 95/98/me
-	bool				m_is95Family;
 
 	// true if windows 98/2k or higher (i.e. not 95/nt)
 	bool				m_isModernFamily;

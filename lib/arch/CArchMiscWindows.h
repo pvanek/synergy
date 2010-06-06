@@ -172,10 +172,6 @@ public:
 	//! Returns true if we got the parent process name.
 	static bool getParentProcessName(CString &name);
 
-	static HINSTANCE instanceWin32();
-
-	static void setInstanceWin32(HINSTANCE instance);
-
 private:
 	//! Open and return a registry key, closing the parent key
 	static HKEY			openKey(HKEY parent, const TCHAR* child, bool create);
@@ -205,7 +201,6 @@ private:
 	static STES_t		s_stes;
 	static HICON		s_largeIcon;
 	static HICON		s_smallIcon;
-	static HINSTANCE	s_instanceWin32;
 };
 
 #endif

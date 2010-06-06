@@ -25,7 +25,6 @@
 
 class CEventQueueTimer;
 class CMSWindowsDesks;
-class CMSWindowsKeyState;
 class CMSWindowsScreenSaver;
 class CThread;
 
@@ -109,9 +108,7 @@ public:
 protected:
 	// IPlatformScreen overrides
 	virtual void		handleSystemEvent(const CEvent&, void*);
-	virtual void		updateButtons();
-	virtual IKeyState*	getKeyState() const;
-
+	
 private:
 	// initialization and shutdown operations
 	HINSTANCE			openHookLibrary(const char* name);
@@ -178,8 +175,8 @@ private:
 	// map a button event to a press (true) or release (false)
 	bool				mapPressFromEvent(WPARAM msg, LPARAM button) const;
 
-	// job to update the key state
-	void				updateKeysCB(void*);
+	// dummy func for backwards compatibility
+	void				updateKeysCB(void*) { }
 
 	// determine whether the mouse is hidden by the system and force
 	// it to be displayed if user has entered this secondary screen.
@@ -219,9 +216,6 @@ private:
 	// true if hooks are not to be installed (useful for debugging)
 	bool				m_noHooks;
 
-	// true if windows 95/98/me
-	bool				m_is95Family;
-
 	// true if mouse has entered the screen
 	bool				m_isOnScreen;
 
@@ -252,9 +246,6 @@ private:
 	// timer for periodically checking stuff that requires polling
 	CEventQueueTimer*	m_fixTimer;
 
-	// the keyboard layout to use when off primary screen
-	HKL					m_keyLayout;
-
 	// screen saver stuff
 	CMSWindowsScreenSaver*	m_screensaver;
 	bool					m_screensaverNotify;
@@ -276,9 +267,6 @@ private:
 	SetSidesFunc		m_setSides;
 	SetZoneFunc			m_setZone;
 	SetModeFunc			m_setMode;
-
-	// keyboard stuff
-	CMSWindowsKeyState*	m_keyState;
 
 	// hot key stuff
 	HotKeyMap			m_hotKeys;

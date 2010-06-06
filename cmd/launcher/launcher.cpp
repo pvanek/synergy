@@ -381,15 +381,31 @@ waitForChild(HWND hwnd, HANDLE thread, DWORD threadID)
 	DialogBoxParam(s_instance, MAKEINTRESOURCE(IDD_WAIT), hwnd,
 								(DLGPROC)waitDlgProc, (LPARAM)&info);
 
-	// force the waiter thread to finish and wait for it
-	SetEvent(info.m_ready);
-	SetEvent(info.m_stop);
-	WaitForSingleObject(waiter, INFINITE);
+	assert(info.m_ready);
+	assert(info.m_stop);
+	assert(waiter);
 
-	// clean up
-	CloseHandle(waiter);
-	CloseHandle(info.m_ready);
-	CloseHandle(info.m_stop);
+	if (info.m_ready) {
+		SetEvent(info.m_ready);
+	}
+
+	if (info.m_stop) {
+		SetEvent(info.m_stop);
+	}
+
+	if (waiter) {
+		// force the waiter thread to finish and wait for it
+		WaitForSingleObject(waiter, INFINITE);
+		CloseHandle(waiter);
+	}
+
+	if (info.m_ready) {
+		CloseHandle(info.m_ready);
+	}
+
+	if (info.m_stop) {
+		CloseHandle(info.m_stop);
+	}
 }
 
 static
@@ -675,9 +691,7 @@ mainWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 int WINAPI
 WinMain(HINSTANCE instance, HINSTANCE, LPSTR cmdLine, int nCmdShow)
 {
-	CArchMiscWindows::setInstanceWin32(instance);
-
-	CArch arch;
+	CArch arch(instance);
 	CLOG;
 	CArgs args;
 

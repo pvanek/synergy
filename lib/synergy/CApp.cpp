@@ -15,44 +15,32 @@
 #include "CApp.h"
 #include "CLog.h"
 #include "Version.h"
+#include "CAppUtil.h"
 #include "ProtocolTypes.h"
-#include "CArch.h"
-#include "XBase.h"
-#include "XArch.h"
-#if SYSAPI_WIN32
-#include "CArchMiscWindows.h"
+
+#if WINAPI_MSWINDOWS
+#include "CMSWindowsAppUtil.h"
 #endif
-#include "LogOutputters.h"
-#include "XSynergy.h"
 
 #include <iostream>
 #include <stdio.h>
 
-CApp* CApp::s_instance = nullptr;
-
-CApp::CApp(CArgsBase* args) :
+CApp::CApp(CArgsBase* args, CAppUtil* util) :
 m_args(args),
 m_bye(&exit),
-s_taskBarReceiver(NULL),
-s_suspended(false)
+m_util(util)
 {
-	assert(s_instance == nullptr);
-	s_instance = this;
+	util->adoptApp(this);
 }
 
 CApp::~CApp()
 {
+	delete m_util;
 	delete m_args;
 }
 
 CApp::CArgsBase::CArgsBase() :
-#if SYSAPI_WIN32
-m_daemon(false), // daemon mode not supported on windows (use --service)
-m_debugServiceWait(false),
-m_relaunchMode(false),
-#else
-m_daemon(true), // backward compatibility for unix (daemon by default)
-#endif
+m_daemon(true),
 m_backend(false),
 m_restartable(true),
 m_noHooks(false),
@@ -91,12 +79,7 @@ CApp::isArg(
 bool
 CApp::parseArg(const int& argc, const char* const* argv, int& i)
 {
-	if (ARCH->parseArg(argc, argv, i)) {
-		// handled by platform util
-		return true;
-	}
-	
-	else if (isArg(i, argc, argv, "-d", "--debug", 1)) {
+	if (isArg(i, argc, argv, "-d", "--debug", 1)) {
 		// change logging level
 		argsBase().m_logFilter = argv[++i];
 	}
@@ -148,8 +131,27 @@ CApp::parseArg(const int& argc, const char* const* argv, int& i)
 		m_bye(kExitSuccess);
 	}
 
+#if WINAPI_MSWINDOWS
+
+	else if (isArg(i, argc, argv, NULL, "--service")) {
+
+		// HACK: assume instance is an ms windows app, and call service
+		// arg handler.
+		// TODO: use inheritance model to fix this.
+		((CMSWindowsAppUtil&)utilBase()).handleServiceArg(argv[++i]);
+	}
+
+#elif WINAPI_XWINDOWS
+
+	else if (isArg(i, argc, argv, "-display", "--display", 1)) {
+		// use alternative display
+		argsBase().m_display = argv[++i];
+	}
+
+#endif
+
 	else {
-		// option not supported here
+		// arg is not common to server and client
 		return false;
 	}
 
@@ -157,7 +159,7 @@ CApp::parseArg(const int& argc, const char* const* argv, int& i)
 }
 
 void
-CApp::parseArgs(int argc, const char* const* argv, int& i)
+CApp::parse(int argc, const char* const* argv, int& i)
 {
 	// about these use of assert() here:
 	// previously an /analyze warning was displayed if we only used assert and
@@ -190,7 +192,8 @@ CApp::parseArgs(int argc, const char* const* argv, int& i)
 		}
 
 		else if (argv[i][0] == '-') {
-			std::cerr << "Unrecognized option: " << argv[i] << std::endl;
+			LOG((CLOG_PRINT "%s: unrecognized option `%s'" BYE,
+				argsBase().m_pname, argv[i], argsBase().m_pname));
 			m_bye(kExitArgs);
 		}
 
@@ -200,18 +203,11 @@ CApp::parseArgs(int argc, const char* const* argv, int& i)
 		}
 	}
 
-#if SYSAPI_WIN32
-	// suggest that user installs as a windows service. when launched as 
-	// service, process should automatically detect that it should run in
-	// daemon mode.
-	if (argsBase().m_daemon) {
-		LOG((CLOG_ERR 
-			"The --daemon argument is not supported on Windows. "
-			"Instead, install %s as a service (--service install).", 
-			argsBase().m_pname));
-		m_bye(kExitArgs);
+	// increase default filter level for daemon.  the user must
+	// explicitly request another level for a daemon.
+	if (argsBase().m_daemon && argsBase().m_logFilter == NULL) {
+		argsBase().m_logFilter = "NOTE";
 	}
-#endif
 }
 
 void
@@ -229,97 +225,4 @@ CApp::version()
 		);
 
 	std::cout << buffer << std::endl;
-}
-
-int
-CApp::run(int argc, char** argv, CreateTaskBarReceiverFunc createTaskBarReceiver)
-{
-#if SYSAPI_WIN32
-	// record window instance for tray icon, etc
-	CArchMiscWindows::setInstanceWin32(GetModuleHandle(NULL));
-#endif
-
-	CArch arch;
-
-	// install application in to arch
-	ARCH->adoptApp(this);
-
-	// create an instance of log
-	CLOG;
-	
-	// HACK: fail by default (saves us setting result in each catch)
-	int result = kExitFailed;
-
-	try {
-		result = ARCH->run(argc, argv, createTaskBarReceiver);
-	}
-	catch (XExitApp& e) {
-		// instead of showing a nasty error, just exit with the error code.
-		// not sure if i like this behaviour, but it's probably better than 
-		// using the exit(int) function!
-		result = e.getCode();
-	}
-	catch (XBase& e) {
-		LOG((CLOG_CRIT "Exception: %s\n", e.what()));
-	}
-	catch (XArch& e) {
-		LOG((CLOG_CRIT "Init failed: %s" BYE, e.what().c_str(), argsBase().m_pname));
-	}
-	catch (std::exception& e) {
-		LOG((CLOG_CRIT "Exception: %s\n", e.what()));
-	}
-	catch (...) {
-		LOG((CLOG_CRIT "An unexpected exception occurred.\n"));
-	}
-
-	delete CLOG;
-
-	ARCH->beforeAppExit();
-	
-	return result;
-}
-
-int
-CApp::daemonMainLoop(int, const char**)
-{
-#if SYSAPI_WIN32
-	CSystemLogger sysLogger(daemonName(), false);
-#else
-	CSystemLogger sysLogger(daemonName(), true);
-#endif
-	return mainLoop();
-}
-
-void 
-CApp::setupFileLogging()
-{
-	if (argsBase().m_logFile != NULL) {
-		m_fileLog = new CFileLogOutputter(argsBase().m_logFile);
-		CLOG->insert(m_fileLog);
-		LOG((CLOG_DEBUG1 "logging to file (%s) enabled", argsBase().m_logFile));
-	}
-}
-
-void 
-CApp::loggingFilterWarning()
-{
-	if (CLOG->getFilter() > CLOG->getConsoleMaxLevel()) {
-		if (argsBase().m_logFile == NULL) {
-			LOG((CLOG_WARN "log messages above %s are NOT sent to console (use file logging)", 
-				CLOG->getFilterName(CLOG->getConsoleMaxLevel())));
-		}
-	}
-}
-
-void 
-CApp::initApp(int argc, const char** argv)
-{
-	// parse command line
-	parseArgs(argc, argv);
-
-	// setup file logging after parsing args
-	setupFileLogging();
-
-	// load configuration
-	loadConfig();
 }
