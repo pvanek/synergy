@@ -58,9 +58,3 @@ COSXServerTaskBarReceiver::getIcon() const
 {
 	return NULL;
 }
-
-IArchTaskBarReceiver*
-createTaskBarReceiver(const CBufferedLogOutputter* logBuffer)
-{
-	return new COSXServerTaskBarReceiver(logBuffer);
-}

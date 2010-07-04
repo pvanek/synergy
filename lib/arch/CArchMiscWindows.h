@@ -25,8 +25,6 @@
 #include "stdstring.h"
 #include "stdset.h"
 #include <windows.h>
-#include <Tlhelp32.h>
-#include "CString.h"
 
 //! Miscellaneous win32 functions.
 class CArchMiscWindows {
@@ -170,16 +168,6 @@ public:
 	//! Briefly interrupt power saving
 	static void			wakeupDisplay();
 
-	//! Returns true if this process was launched via NT service host.
-	static bool wasLaunchedAsService();
-
-	//! Returns true if we got the parent process name.
-	static bool getParentProcessName(CString &name);
-
-	static HINSTANCE instanceWin32();
-
-	static void setInstanceWin32(HINSTANCE instance);
-
 private:
 	//! Open and return a registry key, closing the parent key
 	static HKEY			openKey(HKEY parent, const TCHAR* child, bool create);
@@ -196,10 +184,6 @@ private:
 
 	static DWORD WINAPI	dummySetThreadExecutionState(DWORD);
 
-	static BOOL WINAPI getProcessEntry(PROCESSENTRY32& entry, DWORD processID);
-	static BOOL WINAPI getSelfProcessEntry(PROCESSENTRY32& entry);
-	static BOOL WINAPI getParentProcessEntry(PROCESSENTRY32& entry);
-
 private:
 	typedef std::set<HWND> CDialogs;
 	typedef DWORD (WINAPI *STES_t)(DWORD);
@@ -209,7 +193,6 @@ private:
 	static STES_t		s_stes;
 	static HICON		s_largeIcon;
 	static HICON		s_smallIcon;
-	static HINSTANCE	s_instanceWin32;
 };
 
 #endif

@@ -1,6 +1,5 @@
 /*
- * synergy-plus -- mouse and keyboard sharing utility
- * Copyright (C) 2009 The Synergy+ Project
+ * synergy -- mouse and keyboard sharing utility
  * Copyright (C) 2003 Chris Schoeneman
  * 
  * This package is free software; you can redistribute it and/or
@@ -11,37 +10,30 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CSERVERTASKBARRECEIVER_H
-#define CSERVERTASKBARRECEIVER_H
+#ifndef CCLIENTTASKBARRECEIVER_H
+#define CCLIENTTASKBARRECEIVER_H
 
 #include "CString.h"
 #include "IArchTaskBarReceiver.h"
-#include "stdvector.h"
-#include "CEvent.h"
-#include "CServerApp.h"
-#include "CServer.h"
+
+class CClient;
 
 //! Implementation of IArchTaskBarReceiver for the synergy server
-class CServerTaskBarReceiver : public IArchTaskBarReceiver {
+class CClientTaskBarReceiver : public IArchTaskBarReceiver {
 public:
-	CServerTaskBarReceiver();
-	virtual ~CServerTaskBarReceiver();
+	CClientTaskBarReceiver();
+	virtual ~CClientTaskBarReceiver();
 
 	//! @name manipulators
 	//@{
 
 	//! Update status
 	/*!
-	Determine the status and query required information from the server.
+	Determine the status and query required information from the client.
 	*/
-	void				updateStatus(CServer*, const CString& errorMsg);
-
-	void updateStatus(INode* n, const CString& errorMsg) { updateStatus((CServer*)n, errorMsg); }
+	void				updateStatus(CClient*, const CString& errorMsg);
 
 	//@}
 
@@ -55,11 +47,11 @@ public:
 	virtual std::string	getToolTip() const;
 
 protected:
-	typedef std::vector<CString> CClients;
 	enum EState {
 		kNotRunning,
 		kNotWorking,
 		kNotConnected,
+		kConnecting,
 		kConnected,
 		kMaxState
 	};
@@ -70,9 +62,6 @@ protected:
 	//! Get error message
 	const CString&		getErrorMessage() const;
 
-	//! Get connected clients
-	const CClients&		getClients() const;
-
 	//! Quit app
 	/*!
 	Causes the application to quit gracefully
@@ -81,22 +70,14 @@ protected:
 
 	//! Status change notification
 	/*!
-	Called when status changes.  The default implementation does
-	nothing.
+	Called when status changes.  The default implementation does nothing.
 	*/
-	virtual void		onStatusChanged(CServer* server);
-
-protected:
-	CEvent::Type getReloadConfigEvent();
-	CEvent::Type getForceReconnectEvent();
-	CEvent::Type getResetServerEvent();
+	virtual void		onStatusChanged(CClient* client);
 
 private:
 	EState				m_state;
 	CString				m_errorMessage;
-	CClients			m_clients;
+	CString				m_server;
 };
-
-IArchTaskBarReceiver* createTaskBarReceiver(const CBufferedLogOutputter* logBuffer);
 
 #endif

@@ -23,11 +23,8 @@
 #include "ILogOutputter.h"
 #include "CString.h"
 #include "stddeque.h"
-#include "CThread.h"
 
-#include <list>
 #include <fstream>
-
 //! Stop traversing log chain outputter
 /*!
 This outputter performs no output and returns false from \c write(),
@@ -44,6 +41,7 @@ public:
 	virtual void		close();
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
 };
 
 //! Write log to console
@@ -61,7 +59,7 @@ public:
 	virtual void		close();
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
-	virtual void		flush();
+	virtual const char*	getNewline() const;
 };
 
 //! Write log to file
@@ -80,8 +78,9 @@ public:
 	virtual void		close();
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
 private:
-	std::string m_fileName;
+	std::ofstream		m_handle;
 };
 
 //! Write log to system log
@@ -98,6 +97,7 @@ public:
 	virtual void		close();
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
 };
 
 //! Write log to system log only
@@ -148,6 +148,8 @@ public:
 	virtual void		close();
 	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
+
 private:
 	UInt32				m_maxBufferSize;
 	CBuffer				m_buffer;

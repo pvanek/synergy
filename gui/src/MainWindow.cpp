@@ -21,7 +21,6 @@
 #include "ServerConfigDialog.h"
 #include "SettingsDialog.h"
 #include "LogDialog.h"
-#include "WindowsServices.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -41,6 +40,18 @@ static const char* synergyIconFiles[] =
 	":/res/icons/16x16/synergy-connected.png"
 };
 
+static const char* logLevelNames[] =
+{
+	"ERROR",
+	"WARNING",
+	"NOTE",
+	"INFO",
+	"DEBUG",
+	"DEBUG1",
+	"DEBUG2"
+};
+
+
 MainWindow::MainWindow(QWidget* parent) :
 	QMainWindow(parent),
 	MainWindowBase(),
@@ -51,6 +62,7 @@ MainWindow::MainWindow(QWidget* parent) :
 	m_ServerConfig(&m_Settings, 5, 3),
 	m_pTempConfigFile(NULL),
 	m_pLogDialog(new LogDialog(this, synergyProcess())),
+	m_pLabelStatusBar(NULL),
 	m_pTrayIcon(NULL),
 	m_pTrayIconMenu(NULL)
 {
@@ -58,11 +70,9 @@ MainWindow::MainWindow(QWidget* parent) :
 
 	createTrayIcon();
 	createMenuBar();
+	createStatusBar();
 	loadSettings();
 	initConnections();
-
-	// HACK - surely window should be visible by default?
-	setVisible(true);
 
 	if (appConfig().autoConnect())
 		startSynergy();
@@ -72,11 +82,6 @@ MainWindow::~MainWindow()
 {
 	stopSynergy();
 	saveSettings();
-}
-
-void MainWindow::setStatus(const QString &status)
-{
-	m_pStatusLabel->setText(status);
 }
 
 void MainWindow::createTrayIcon()
@@ -128,9 +133,6 @@ void MainWindow::createMenuBar()
 	pMenuFile->addSeparator();
 	pMenuFile->addAction(m_pActionQuit);
 	pMenuEdit->addAction(m_pActionSettings);
-#if defined(Q_OS_WIN)
-	pMenuEdit->addAction(m_pActionServices);
-#endif
 	pMenuView->addAction(m_pActionLogOutput);
 	pMenuWindow->addAction(m_pActionMinimize);
 	pMenuWindow->addAction(m_pActionRestore);
@@ -139,8 +141,27 @@ void MainWindow::createMenuBar()
 	setMenuBar(menubar);
 }
 
+void MainWindow::createStatusBar()
+{
+	m_pLabelStatusBar = new QLabel(tr("Synergy is not running."));
+	statusBar()->addPermanentWidget(m_pLabelStatusBar);
+}
+
 void MainWindow::loadSettings()
 {
+	// gui
+	QRect rect = settings().value("windowGeometry", geometry()).toRect();
+	move(rect.x(), rect.y());
+	resize(rect.width(), rect.height());
+
+#if !defined(Q_OS_MAC)
+	setVisible(settings().value("windowVisible", true).toBool());
+#else
+	setVisible(true);
+#endif
+
+	// program settings
+
 	// the next two must come BEFORE loading groupServerChecked and groupClientChecked or
 	// disabling and/or enabling the right widgets won't automatically work
 	m_pRadioExternalConfig->setChecked(settings().value("externalConfig", false).toBool());
@@ -166,6 +187,13 @@ void MainWindow::initConnections()
 
 void MainWindow::saveSettings()
 {
+	// gui
+	settings().setValue("windowGeometry", geometry());
+
+#if !defined(Q_OS_MAC)
+	settings().setValue("windowVisible", isVisible());
+#endif
+	
 	// program settings
 	settings().setValue("groupServerChecked", m_pGroupServer->isChecked());
 	settings().setValue("externalConfig", m_pRadioExternalConfig->isChecked());
@@ -179,6 +207,11 @@ void MainWindow::saveSettings()
 
 void MainWindow::setIcon(qSynergyState state)
 {
+#if defined(Q_OS_WIN)
+	setVisible(state == synergyDisconnected);
+	m_pTrayIcon->setVisible(state == synergyDisconnected);
+#endif
+
 	QIcon icon;
 	icon.addFile(synergyIconFiles[state]);
 
@@ -201,14 +234,14 @@ void MainWindow::startSynergy()
 	QString app;
 	QStringList args;
 
-	args << "-f" << "--debug" << appConfig().logLevelText();
+	args << "-f" << "--debug" << logLevelNames[appConfig().logLevel()];
 
 	if (!appConfig().screenName().isEmpty())
 		args << "--name" << appConfig().screenName();
 
 	setSynergyProcess(new QProcess(this));
 
-	if ((synergyType() == synergyClient && !clientArgs(args, app))
+	if (((synergyType() == synergyClient && !clientArgs(args, app)))
 			|| (synergyType() == synergyServer && !serverArgs(args, app)))
 	{
 		stopSynergy();
@@ -234,7 +267,7 @@ void MainWindow::startSynergy()
 
 bool MainWindow::clientArgs(QStringList& args, QString& app)
 {
-	app = appPath(appConfig().synergycName(), appConfig().synergyc());
+	app = appConfig().synergyc();
 
 	if (!QFile::exists(app))
 	{
@@ -255,75 +288,14 @@ bool MainWindow::clientArgs(QStringList& args, QString& app)
 		return false;
 	}
 
-	if (appConfig().logToFile())
-	{
-		appConfig().persistLogDir();
-		args << "--log" << appConfig().logFilename();
-	}
-
 	args << m_pLineEditHostname->text() + ":" + QString::number(appConfig().port());
 
 	return true;
 }
 
-QString MainWindow::configFilename()
-{
-	QString filename;
-	if (m_pRadioInternalConfig->isChecked())
-	{
-		// TODO: no need to use a temporary file, since we need it to
-		// be permenant (since it'll be used for Windows services, etc).
-		m_pTempConfigFile = new QTemporaryFile();
-		if (!m_pTempConfigFile->open())
-		{
-			QMessageBox::critical(this, tr("Cannot write configuration file"), tr("The temporary configuration file required to start synergy can not be written."));
-			return false;
-		}
-
-		serverConfig().save(*m_pTempConfigFile);
-		filename = m_pTempConfigFile->fileName();
-
-		m_pTempConfigFile->close();
-	}
-	else
-	{
-		if (!QFile::exists(m_pLineEditConfigFile->text()))
-		{
-			if (QMessageBox::warning(this, tr("Configuration filename invalid"),
-				tr("You have not filled in a valid configuration file for the synergy server. "
-						"Do you want to browse for the configuration file now?"), QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes
-					|| !on_m_pButtonBrowseConfigFile_clicked())
-				return false;
-		}
-
-		filename = m_pLineEditConfigFile->text();
-	}
-	return filename;
-}
-
-QString MainWindow::address()
-{
-	return (!appConfig().interface().isEmpty() ? appConfig().interface() : "") + ":" + QString::number(appConfig().port());
-}
-
-QString MainWindow::appPath(const QString& name, const QString& defaultPath)
-{
-	QString app;
-	if (appConfig().autoDetectPaths())
-	{
-		// actually returns bool, but ignore for now
-		appConfig().detectPath(name, app);
-	}
-	else
-	{
-		app = defaultPath;
-	}
-	return app;
-}
-
 bool MainWindow::serverArgs(QStringList& args, QString& app)
 {
-	app = appPath(appConfig().synergysName(), appConfig().synergys());
+	app = appConfig().synergys();
 
 	if (!QFile::exists(app))
 	{
@@ -338,13 +310,36 @@ bool MainWindow::serverArgs(QStringList& args, QString& app)
 		appConfig().setSynergys(app);
 	}
 
-	if (appConfig().logToFile())
+	if (m_pRadioInternalConfig->isChecked())
 	{
-		appConfig().persistLogDir();
-		args << "--log" << appConfig().logFilename();
+		m_pTempConfigFile = new QTemporaryFile();
+		if (!m_pTempConfigFile->open())
+		{
+			QMessageBox::critical(this, tr("Cannot write configuration file"), tr("The temporary configuration file required to start synergy can not be written."));
+			return false;
+		}
+
+		serverConfig().save(*m_pTempConfigFile);
+		args << "-c" << m_pTempConfigFile->fileName();
+
+		m_pTempConfigFile->close();
+		// the file will be removed from disk when the object is deleted; this happens in stopSynergy()
+	}
+	else
+	{
+		if (!QFile::exists(m_pLineEditConfigFile->text()))
+		{
+			if (QMessageBox::warning(this, tr("Configuration filename invalid"),
+				tr("You have not filled in a valid configuration file for the synergy server. "
+						"Do you want to browse for the configuration file now?"), QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes
+					|| !on_m_pButtonBrowseConfigFile_clicked())
+				return false;
+		}
+
+		args << "-c" << m_pLineEditConfigFile->text();
 	}
 
-	args << "-c" << configFilename() << "--address" << address();
+	args << "--address" << (!appConfig().interface().isEmpty() ? appConfig().interface() : "") + ":" + QString::number(appConfig().port());
 
 	return true;
 }
@@ -361,9 +356,7 @@ void MainWindow::stopSynergy()
 		setSynergyState(synergyDisconnected);
 	}
 
-	// HACK: deleting the object deletes the physical file, which is
-	// bad, since it could be in use by the Windows service!
-	//delete m_pTempConfigFile;
+	delete m_pTempConfigFile;
 	m_pTempConfigFile = NULL;
 }
 
@@ -393,22 +386,22 @@ void MainWindow::setSynergyState(qSynergyState state)
 
 	if (state == synergyConnected)
 	{
-		disconnect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
-		connect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
-		m_pButtonToggleStart->setText(tr("&Stop"));
+		disconnect (m_pButtonStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
+		connect (m_pButtonStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
+		m_pButtonStart->setText(tr("&Stop"));
 	}
 	else
 	{
-		disconnect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
-		connect (m_pButtonToggleStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
-		m_pButtonToggleStart->setText(tr("&Start"));
+		disconnect (m_pButtonStart, SIGNAL(clicked()), m_pActionStopSynergy, SLOT(trigger()));
+		connect (m_pButtonStart, SIGNAL(clicked()), m_pActionStartSynergy, SLOT(trigger()));
+		m_pButtonStart->setText(tr("&Start"));
 	}
 
 	m_pGroupClient->setEnabled(state == synergyDisconnected);
 	m_pGroupServer->setEnabled(state == synergyDisconnected);
 	m_pActionStartSynergy->setEnabled(state == synergyDisconnected);
 	m_pActionStopSynergy->setEnabled(state == synergyConnected);
-	setStatus(state == synergyConnected ? QString(tr("Synergy %1 is running.")).arg(synergyType() == synergyServer ? tr("server") : tr("client")) : tr("Synergy is not running."));
+	m_pLabelStatusBar->setText(state == synergyConnected ? QString(tr("Synergy %1 is running.")).arg(synergyType() == synergyServer ? tr("server") : tr("client")) : tr("Synergy is not running."));
 	setIcon(state);
 	m_SynergyState = state;
 }
@@ -455,12 +448,6 @@ void MainWindow::on_m_pActionAbout_triggered()
 void MainWindow::on_m_pActionSettings_triggered()
 {
 	SettingsDialog dlg(this, appConfig());
-	dlg.exec();
-}
-
-void MainWindow::on_m_pActionServices_triggered()
-{
-	WindowsServices dlg(this, appConfig());
 	dlg.exec();
 }
 
