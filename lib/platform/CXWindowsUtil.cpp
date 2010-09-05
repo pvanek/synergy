@@ -1,6 +1,5 @@
 /*
- * synergy-plus -- mouse and keyboard sharing utility
- * Copyright (C) 2009 The Synergy+ Project
+ * synergy -- mouse and keyboard sharing utility
  * Copyright (C) 2002 Chris Schoeneman
  * 
  * This package is free software; you can redistribute it and/or
@@ -11,9 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "CXWindowsUtil.h"
@@ -1385,11 +1381,7 @@ CXWindowsUtil::setWindowProperty(Display* display, Window window,
 {
 	const UInt32 length       = 4 * XMaxRequestSize(display);
 	const unsigned char* data = reinterpret_cast<const unsigned char*>(vdata);
-	UInt32 datumSize    = static_cast<UInt32>(format / 8);
-	// format 32 on 64bit systems is 8 bytes not 4.
-	if (format == 32) {
-		datumSize = sizeof(Atom);
-	}
+	const UInt32 datumSize    = static_cast<UInt32>(format / 8);
 
 	// save errors
 	bool error = false;
