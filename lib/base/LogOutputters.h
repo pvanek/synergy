@@ -1,6 +1,5 @@
 /*
- * synergy-plus -- mouse and keyboard sharing utility
- * Copyright (C) 2009 The Synergy+ Project
+ * synergy -- mouse and keyboard sharing utility
  * Copyright (C) 2002 Chris Schoeneman
  * 
  * This package is free software; you can redistribute it and/or
@@ -11,9 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef LOGOUTPUTTERS_H
@@ -22,11 +18,7 @@
 #include "BasicTypes.h"
 #include "ILogOutputter.h"
 #include "CString.h"
-#include "stddeque.h"
-#include "CThread.h"
-
-#include <list>
-#include <fstream>
+#include "stdlist.h"
 
 //! Stop traversing log chain outputter
 /*!
@@ -42,8 +34,8 @@ public:
 	// ILogOutputter overrides
 	virtual void		open(const char* title);
 	virtual void		close();
-	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
 };
 
 //! Write log to console
@@ -59,29 +51,8 @@ public:
 	// ILogOutputter overrides
 	virtual void		open(const char* title);
 	virtual void		close();
-	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
-	virtual void		flush();
-};
-
-//! Write log to file
-/*!
-This outputter writes output to the file.  The level for each
-message is ignored.
-*/
-
-class CFileLogOutputter : public ILogOutputter {
-public:
-	CFileLogOutputter(const char* logFile);
-	virtual ~CFileLogOutputter();
-
-	// ILogOutputter overrides
-	virtual void		open(const char* title);
-	virtual void		close();
-	virtual void		show(bool showIfEmpty);
-	virtual bool		write(ELevel level, const char* message);
-private:
-	std::string m_fileName;
+	virtual const char*	getNewline() const;
 };
 
 //! Write log to system log
@@ -96,8 +67,8 @@ public:
 	// ILogOutputter overrides
 	virtual void		open(const char* title);
 	virtual void		close();
-	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
 };
 
 //! Write log to system log only
@@ -110,7 +81,7 @@ the scope.
 */
 class CSystemLogger {
 public:
-	CSystemLogger(const char* title, bool blockConsole);
+	CSystemLogger(const char* title);
 	~CSystemLogger();
 
 private:
@@ -124,7 +95,7 @@ This outputter records the last N log messages.
 */
 class CBufferedLogOutputter : public ILogOutputter {
 private:
-	typedef std::deque<CString> CBuffer;
+	typedef std::list<CString> CBuffer;
 
 public:
 	typedef CBuffer::const_iterator const_iterator;
@@ -146,9 +117,11 @@ public:
 	// ILogOutputter overrides
 	virtual void		open(const char* title);
 	virtual void		close();
-	virtual void		show(bool showIfEmpty);
 	virtual bool		write(ELevel level, const char* message);
+	virtual const char*	getNewline() const;
+
 private:
+	UInt32				m_bufferSize;
 	UInt32				m_maxBufferSize;
 	CBuffer				m_buffer;
 };
