@@ -12,8 +12,7 @@ FORMS += res/MainWindowBase.ui \
     res/ActionDialogBase.ui \
     res/HotkeyDialogBase.ui \
     res/SettingsDialogBase.ui \
-    res/LogDialogBase.ui \
-    res/WindowsServicesBase.ui
+    res/LogDialogBase.ui
 SOURCES += src/main.cpp \
     src/MainWindow.cpp \
     src/AboutDialog.cpp \
@@ -35,8 +34,7 @@ SOURCES += src/main.cpp \
     src/LogDialog.cpp \
     src/SettingsDialog.cpp \
     src/AppConfig.cpp \
-    src/QSynergyApplication.cpp \
-    src/WindowsServices.cpp
+    src/QSynergyApplication.cpp
 HEADERS += src/MainWindow.h \
     src/AboutDialog.h \
     src/ServerConfig.h \
@@ -57,8 +55,7 @@ HEADERS += src/MainWindow.h \
     src/LogDialog.h \
     src/SettingsDialog.h \
     src/AppConfig.h \
-    src/QSynergyApplication.h \
-    src/WindowsServices.h
+    src/QSynergyApplication.h
 RESOURCES += res/QSynergy.qrc
 RC_FILE = res/win/QSynergy.rc
 macx { 

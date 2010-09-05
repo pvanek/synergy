@@ -15,8 +15,8 @@
 
 # Version number for Synergy+
 SET(VERSION_MAJOR 1)
-SET(VERSION_MINOR 5)
-SET(VERSION_REV 0)
+SET(VERSION_MINOR 3)
+SET(VERSION_REV 6)
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REV}")
 
 
@@ -80,8 +80,7 @@ IF(WIN32)
 	SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${VS_ARGS}")
 	SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${VS_ARGS}")
 
-	# this line removes "/D NDEBUG" from release, we want them in order to find bugs even on release builds.
-	SET(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2")
+# this line removes "/D NDEBUG" from release, we want them in order to find bugs even on release builds.
+SET(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2")
 
 ENDIF(WIN32)
-

@@ -58,9 +58,3 @@ CXWindowsServerTaskBarReceiver::getIcon() const
 {
 	return NULL;
 }
-
-IArchTaskBarReceiver*
-createTaskBarReceiver(const CBufferedLogOutputter* logBuffer)
-{
-	return new CXWindowsServerTaskBarReceiver(logBuffer);
-}
