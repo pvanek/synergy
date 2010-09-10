@@ -1,19 +1,15 @@
 /*
- * synergy-plus -- mouse and keyboard sharing utility
- * Copyright (C) 2009 The Synergy+ Project
+ * synergy -- mouse and keyboard sharing utility
  * Copyright (C) 2002 Chris Schoeneman
  * 
- * This package is free software; you can redistribute it and/or
+ * This package is free software you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * found in the file COPYING that should have accompanied this file.
  * 
  * This package is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * but WITHOUT ANY WARRANTY without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "CArchNetworkBSD.h"
@@ -320,10 +316,8 @@ CArchNetworkBSD::pollSocket(CPollEntry pe[], int num, double timeout)
 	if (n > 0 && unblockPipe != NULL && (pfd[num].revents & POLLIN) != 0) {
 		// the unblock event was signalled.  flush the pipe.
 		char dummy[100];
-		int ignore;
-
 		do {
-			ignore = read(unblockPipe[0], dummy, sizeof(dummy));
+			read(unblockPipe[0], dummy, sizeof(dummy));
 		} while (errno != EAGAIN);
 
 		// don't count this unblock pipe in return value
@@ -495,9 +489,7 @@ CArchNetworkBSD::unblockPollSocket(CArchThread thread)
 	const int* unblockPipe = getUnblockPipeForThread(thread);
 	if (unblockPipe != NULL) {
 		char dummy = 0;
-		int ignore;
-
-		ignore = write(unblockPipe[1], &dummy, 1);
+		write(unblockPipe[1], &dummy, 1);
 	}
 }
 
