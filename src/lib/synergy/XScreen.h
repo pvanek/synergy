@@ -16,9 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef XSCREEN_H
+#define XSCREEN_H
 
-#include "base/XBase.h"
+#include "XBase.h"
 
 //! Generic screen exception
 XBASE_SUBCLASS(XScreen, XBase);
@@ -47,7 +48,7 @@ public:
 	trying to open the screen again.
 	*/
 	XScreenUnavailable(double timeUntilRetry);
-	virtual ~XScreenUnavailable() _NOEXCEPT;
+	virtual ~XScreenUnavailable();
 
 	//! @name manipulators
 	//@{
@@ -66,3 +67,5 @@ protected:
 private:
 	double				m_timeUntilRetry;
 };
+
+#endif

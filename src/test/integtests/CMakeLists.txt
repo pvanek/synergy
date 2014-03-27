@@ -14,58 +14,76 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB_RECURSE headers "*.h")
-file(GLOB_RECURSE sources "*.cpp")
+set(h
+	CTestEventQueue.h
+)
 
-# remove platform files (specific platform added later).
-file(GLOB_RECURSE remove_platform "platform/*")
-list(REMOVE_ITEM headers ${remove_platform})
-list(REMOVE_ITEM sources ${remove_platform})
+set(src
+	${h}
+	Main.cpp
+	CIpcTests.cpp
+	NetworkTests.cpp
+	CTestEventQueue.cpp
+)
+
+# arch
+if (WIN32)
+	list(APPEND src
+		arch/CArchInternetWindowsTests.cpp
+	)
+elseif (UNIX)
+	list(APPEND src
+		arch/CArchInternetUnixTests.cpp
+	)
+endif()
 
 # platform
 if (WIN32)
-	file(GLOB platform_sources "platform/MSWindows*.cpp")
-	file(GLOB platform_headers "platform/MSWindows*.h")
+	list(APPEND src
+		platform/CMSWindowsClipboardTests.cpp
+		platform/CMSWindowsKeyStateTests.cpp
+	)
 elseif (APPLE)
-	file(GLOB platform_sources "platform/OSX*.cpp")
-	file(GLOB platform_headers "platform/OSX*.h")
+	list(APPEND src
+		platform/COSXClipboardTests.cpp
+		platform/COSXKeyStateTests.cpp
+		platform/COSXScreenTests.cpp
+	)
 elseif (UNIX)
-	file(GLOB platform_sources "platform/XWindows*.cpp")
-	file(GLOB platform_headers "platform/XWindows*.h")
+	list(APPEND src
+		platform/CXWindowsClipboardTests.cpp
+		platform/CXWindowsKeyStateTests.cpp
+		platform/CXWindowsScreenTests.cpp
+		platform/CXWindowsScreenSaverTests.cpp
+	)
 endif()
 
-list(APPEND sources ${platform_sources})
-list(APPEND headers ${platform_headers})
-
-file(GLOB_RECURSE global_headers "../../test/global/*.h")
-file(GLOB_RECURSE global_sources "../../test/global/*.cpp")
-
-list(APPEND headers ${global_headers})
-list(APPEND sources ${global_sources})
-
-file(GLOB_RECURSE mock_headers "../../test/mock/*.h")
-file(GLOB_RECURSE mock_sources "../../test/mock/*.cpp")
-
-list(APPEND headers ${mock_headers})
-list(APPEND sources ${mock_sources})
-
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
-endif()
-
-include_directories(
-	../../
-	../../lib/
-	../../../ext/gtest-1.6.0/include
-	../../../ext/gmock-1.6.0/include
+set(inc
+	../../lib/arch
+	../../lib/base
+	../../lib/client
+	../../lib/common
+	../../lib/io
+	../../lib/ipc
+	../../lib/mt
+	../../lib/net
+	../../lib/platform
+	../../lib/server
+	../../lib/synergy
+	../../lib/synwinhk
+	../../lib/synwinxt
+	../../../tools/gtest-1.6.0/include
+	../../../tools/gmock-1.6.0/include
+	../unittests
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-add_executable(integtests ${sources})
+include_directories(${inc})
+add_executable(integtests ${src})
 target_link_libraries(integtests
 	arch base client common io ipc mt net platform server synergy gtest gmock cryptopp ${libs})

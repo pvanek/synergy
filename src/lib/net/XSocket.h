@@ -16,12 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef XSOCKET_H
+#define XSOCKET_H
 
-#include "io/XIO.h"
-#include "base/XBase.h"
-#include "base/String.h"
-#include "common/basic_types.h"
+#include "XIO.h"
+#include "XBase.h"
+#include "CString.h"
+#include "BasicTypes.h"
 
 //! Generic socket exception
 XBASE_SUBCLASS(XSocket, XBase);
@@ -41,8 +42,7 @@ public:
 		kBadPort		//!< The port is invalid
 	};
 
-	XSocketAddress(EError, const CString& hostname, int port) _NOEXCEPT;
-	virtual ~XSocketAddress() _NOEXCEPT { }
+	XSocketAddress(EError, const CString& hostname, int port) throw();
 
 	//! @name accessors
 	//@{
@@ -96,3 +96,5 @@ XBASE_SUBCLASS_FORMAT(XSocketConnect, XSocket);
 Thrown when a socket cannot be created (by the operating system).
 */
 XBASE_SUBCLASS_FORMAT(XSocketCreate, XSocket);
+
+#endif

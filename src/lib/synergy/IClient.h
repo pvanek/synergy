@@ -16,14 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ICLIENT_H
+#define ICLIENT_H
 
-#include "synergy/clipboard_types.h"
-#include "synergy/IScreen.h"
-#include "synergy/key_types.h"
-#include "synergy/mouse_types.h"
-#include "synergy/option_types.h"
-#include "base/String.h"
+#include "IScreen.h"
+#include "ClipboardTypes.h"
+#include "KeyTypes.h"
+#include "MouseTypes.h"
+#include "OptionTypes.h"
+#include "CString.h"
 
 //! Client interface
 /*!
@@ -174,3 +175,5 @@ public:
 							SInt32& width, SInt32& height) const = 0;
 	virtual void		getCursorPos(SInt32& x, SInt32& y) const = 0;
 };
+
+#endif

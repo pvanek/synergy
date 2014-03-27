@@ -16,9 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef XSYNERGY_H
+#define XSYNERGY_H
 
-#include "base/XBase.h"
+#include "XBase.h"
 
 //! Generic synergy exception
 XBASE_SUBCLASS(XSynergy, XBase);
@@ -63,7 +64,6 @@ a client that is already connected.
 class XDuplicateClient : public XSynergy {
 public:
 	XDuplicateClient(const CString& name);
-	virtual ~XDuplicateClient() _NOEXCEPT { }
 
 	//! @name accessors
 	//@{
@@ -89,7 +89,6 @@ unknown to the server.
 class XUnknownClient : public XSynergy {
 public:
 	XUnknownClient(const CString& name);
-	virtual ~XUnknownClient() _NOEXCEPT { }
 
 	//! @name accessors
 	//@{
@@ -116,7 +115,6 @@ exit(int).
 class XExitApp : public XSynergy {
 public:
 	XExitApp(int code);
-	virtual ~XExitApp() _NOEXCEPT { }
 
 	//! Get the exit code
 	int getCode() const throw();
@@ -127,3 +125,5 @@ protected:
 private:
 	int	m_code;
 };
+
+#endif

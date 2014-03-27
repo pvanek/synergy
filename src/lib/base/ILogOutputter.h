@@ -16,11 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ILOGOUTPUTTER_H
+#define ILOGOUTPUTTER_H
 
-#include "base/Log.h"
-#include "base/ELevel.h"
-#include "common/IInterface.h"
+#include "IInterface.h"
+#include "CLog.h"
+#include "ELevel.h"
 
 //! Outputter interface
 /*!
@@ -67,3 +68,5 @@ public:
 
 	//@}
 };
+
+#endif

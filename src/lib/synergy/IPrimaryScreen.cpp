@@ -16,9 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/IPrimaryScreen.h"
-#include "base/EventQueue.h"
-
+#include "IPrimaryScreen.h"
+#include "CEventQueue.h"
 #include <cstdlib>
 
 //

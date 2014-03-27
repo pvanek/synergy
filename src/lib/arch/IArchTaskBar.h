@@ -16,9 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef IARCHTASKBAR_H
+#define IARCHTASKBAR_H
 
-#include "common/IInterface.h"
+#include "IInterface.h"
 
 class IArchTaskBarReceiver;
 
@@ -61,3 +62,5 @@ public:
 
 	virtual void init() = 0;
 };
+
+#endif

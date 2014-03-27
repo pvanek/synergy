@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/ToolApp.h"
-#include "arch/Arch.h"
+#include "CToolApp.h"
+#include "CArch.h"
 
 int
 main(int argc, char** argv) 

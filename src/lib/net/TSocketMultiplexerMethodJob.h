@@ -16,10 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef TSOCKERMULTIPLEXERMETHODJOB_H
+#define TSOCKERMULTIPLEXERMETHODJOB_H
 
-#include "net/ISocketMultiplexerJob.h"
-#include "arch/Arch.h"
+#include "ISocketMultiplexerJob.h"
+#include "CArch.h"
 
 //! Use a method as a socket multiplexer job
 /*!
@@ -107,3 +108,5 @@ TSocketMultiplexerMethodJob<T>::isWritable() const
 {
 	return m_writable;
 }
+
+#endif

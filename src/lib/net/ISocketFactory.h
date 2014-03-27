@@ -16,9 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ISOCKETFACTORY_H
+#define ISOCKETFACTORY_H
 
-#include "common/IInterface.h"
+#include "IInterface.h"
 
 class IDataSocket;
 class IListenSocket;
@@ -41,3 +42,5 @@ public:
 
 	//@}
 };
+
+#endif

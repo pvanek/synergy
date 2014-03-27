@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/IClipboard.h"
-#include "common/stdvector.h"
+#include "IClipboard.h"
+#include "stdvector.h"
 
 //
 // IClipboard

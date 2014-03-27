@@ -88,6 +88,8 @@ MainWindow::MainWindow(QSettings& settings, AppConfig& appConfig) :
 	m_pLabelScreenName->setText(getScreenName());
 	m_pLabelIpAddresses->setText(getIPAddresses());
 
+	updatePremiumInfo();
+
 #if defined(Q_OS_WIN)
 	// ipc must always be enabled, so that we can disable command when switching to desktop mode.
 	connect(&m_IpcClient, SIGNAL(readLogLine(const QString&)), this, SLOT(appendLogRaw(const QString&)));
@@ -119,20 +121,15 @@ MainWindow::~MainWindow()
 	saveSettings();
 }
 
-void MainWindow::open()
+void MainWindow::start()
 {
-	updatePremiumInfo();
-
 	createTrayIcon();
 
 	showNormal();
 
 	m_VersionChecker.checkLatest();
 
-	// only start if user has previously started. this stops the gui from
-	// auto hiding before the user has configured synergy (which of course
-	// confuses first time users, who think synergy has crashed).
-	if (appConfig().startedBefore() && appConfig().processMode() == Desktop) {
+	if (appConfig().processMode() == Desktop) {
 		startSynergy();
 	}
 }
@@ -451,14 +448,6 @@ void MainWindow::startSynergy()
 
 	if (desktopMode)
 	{
-		if (!appConfig().startedBefore()) {
-			QMessageBox::information(
-				this, "Synergy",
-				tr("Synergy will be minimized to the notification "
-				"area. This will happen automatically when Synergy "
-				"starts."));
-		}
-
 		synergyProcess()->start(app, args);
 		if (!synergyProcess()->waitForStarted())
 		{
@@ -474,10 +463,6 @@ void MainWindow::startSynergy()
 		QString command(app + " " + args.join(" "));
 		m_IpcClient.sendCommand(command, m_ElevateProcess);
 	}
-
-	appConfig().setStartedBefore(true);
-	appConfig().saveSettings();
-
 }
 
 bool MainWindow::clientArgs(QStringList& args, QString& app)

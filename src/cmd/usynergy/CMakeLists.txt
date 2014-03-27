@@ -15,11 +15,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 if (WIN32)
-	set(sources uSynergyWin32.c)
+	set(src uSynergyWin32.c)
 elseif (UNIX)
-	set(sources uSynergyUnix.c)
+	set(src uSynergyUnix.c)
 endif()
 
 include_directories(../../micro)
-add_executable(usynergy ${sources})
+add_executable(usynergy ${src})
 target_link_libraries(usynergy micro)

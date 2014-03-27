@@ -14,26 +14,40 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+set(inc
+	CClient.h
+	CServerProxy.h
+)
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
+set(src
+	CClient.cpp
+	CServerProxy.cpp
+)
+
+if (WIN32)
+	list(APPEND src ${inc})
 endif()
 
-include_directories(
-	../
-	../../../ext
+set(inc
+	../arch
+	../base
+	../common
+	../io
+	../mt
+	../net
+	../synergy
+	../../../tools
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 
 endif()
 
-add_library(client STATIC ${sources})
+include_directories(${inc})
+add_library(client STATIC ${src})
 
 if (UNIX)
 	target_link_libraries(client synergy io)

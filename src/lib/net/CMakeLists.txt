@@ -14,24 +14,52 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+set(inc
+	CNetworkAddress.h
+	CSocketMultiplexer.h
+	CTCPListenSocket.h
+	CTCPSocket.h
+	CTCPSocketFactory.h
+	IDataSocket.h
+	IListenSocket.h
+	ISocket.h
+	ISocketFactory.h
+	ISocketMultiplexerJob.h
+	TSocketMultiplexerMethodJob.h
+	XSocket.h
+)
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
+set(src
+	CNetworkAddress.cpp
+	CSocketMultiplexer.cpp
+	CTCPListenSocket.cpp
+	CTCPSocket.cpp
+	CTCPSocketFactory.cpp
+	IDataSocket.cpp
+	XSocket.cpp
+)
+
+if (WIN32)
+	list(APPEND src ${inc})
 endif()
 
-include_directories(
-	../
+set(inc
+	../arch
+	../base
+	../common
+	../io
+	../mt
+	../synergy
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-add_library(net STATIC ${sources})
+include_directories(${inc})
+add_library(net STATIC ${src})
 
 if (UNIX)
 	target_link_libraries(net mt io)

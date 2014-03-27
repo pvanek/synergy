@@ -16,15 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef IKEYSTATE_H
+#define IKEYSTATE_H
 
-#include "synergy/key_types.h"
-#include "base/Event.h"
-#include "base/String.h"
-#include "base/IEventQueue.h"
-#include "base/EventTypes.h"
-#include "common/stdset.h"
-#include "common/IInterface.h"
+#include "IInterface.h"
+#include "KeyTypes.h"
+#include "CEvent.h"
+#include "CString.h"
+#include "stdset.h"
+#include "IEventQueue.h"
+#include "CEventTypes.h"
 
 //! Key state interface
 /*!
@@ -164,4 +165,9 @@ public:
 	virtual void		pollPressedKeys(KeyButtonSet& pressedKeys) const = 0;
 
 	//@}
+
+private:
+	IEventQueue*		m_events;
 };
+
+#endif

@@ -16,9 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/XBase.h"
-#include "base/String.h"
-
+#include "XBase.h"
+#include "CStringUtil.h"
 #include <cerrno>
 #include <cstdarg>
 
@@ -27,30 +26,29 @@
 //
 
 XBase::XBase() :
-	std::runtime_error("")
+	m_what()
 {
 	// do nothing
 }
 
 XBase::XBase(const CString& msg) :
-	std::runtime_error(msg)
+	m_what(msg)
 {
 	// do nothing
 }
 
-XBase::~XBase() _NOEXCEPT
+XBase::~XBase()
 {
 	// do nothing
 }
 
 const char*
-XBase::what() const _NOEXCEPT
+XBase::what() const
 {
-	const char* what = std::runtime_error::what();
-	if (strlen(what) == 0) {
-		return getWhat().c_str();
+	if (m_what.empty()) {
+		m_what = getWhat();
 	}
-	return what;
+	return m_what.c_str();
 }
 
 CString
@@ -64,7 +62,7 @@ XBase::format(const char* /*id*/, const char* fmt, ...) const throw()
 	va_list args;
 	va_start(args, fmt);
 	try {
-		result = synergy::string::vformat(fmt, args);
+		result = CStringUtil::vformat(fmt, args);
 	}
 	catch (...) {
 		// ignore

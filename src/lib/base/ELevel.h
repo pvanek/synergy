@@ -16,7 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ELEVEL_H
+#define ELEVEL_H
 
 //! Log levels
 /*!
@@ -36,3 +37,5 @@ enum ELevel {
 	kDEBUG4,		//!< For verbosity +4 debugging messages
 	kDEBUG5			//!< For verbosity +5 debugging messages
 };
+
+#endif

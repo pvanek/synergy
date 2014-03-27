@@ -16,6 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/stdpre.h"
+#include "stdpre.h"
 #include <vector>
-#include "common/stdpost.h"
+#include "stdpost.h"

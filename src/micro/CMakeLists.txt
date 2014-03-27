@@ -14,11 +14,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.c")
+set(src
+	uSynergy.c
+)
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
+if (WIN32)
+	list(APPEND src uSynergy.h)
 endif()
 
-add_library(micro STATIC ${sources})
+add_library(micro STATIC ${src})

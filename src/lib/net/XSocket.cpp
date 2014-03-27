@@ -16,15 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "net/XSocket.h"
-#include "base/String.h"
+#include "XSocket.h"
+#include "CStringUtil.h"
 
 //
 // XSocketAddress
 //
 
 XSocketAddress::XSocketAddress(EError error,
-				const CString& hostname, int port) _NOEXCEPT :
+				const CString& hostname, int port) throw() :
 	m_error(error),
 	m_hostname(hostname),
 	m_port(port)
@@ -69,7 +69,7 @@ XSocketAddress::getWhat() const throw()
 	};
 	return format(s_errorID[m_error], s_errorMsg[m_error],
 								m_hostname.c_str(), 
-								synergy::string::sprintf("%d", m_port).c_str());
+								CStringUtil::print("%d", m_port).c_str());
 }
 
 

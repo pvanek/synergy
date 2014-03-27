@@ -20,7 +20,6 @@
 
 #include <QProcess>
 #include <QCoreApplication>
-#include <stdexcept>
 
 // we use syntool to authenticate because Qt's http library is very
 // unreliable, and since we're writing platform specific code, use the
@@ -33,35 +32,17 @@ QString PremiumAuth::request(const QString& email, const QString& password)
 	QProcess process;
 	process.setReadChannel(QProcess::StandardOutput);
 	process.start(program, args);
-	bool success = process.waitForStarted();
 
-	QString out, error;
-	if (success)
+	if (process.waitForStarted())
 	{
 		// hash password in case it contains interesting chars.
 		QString credentials(email + ":" + hash(password) + "\n");
 		process.write(credentials.toStdString().c_str());
 
 		if (process.waitForFinished()) {
-			out = process.readAllStandardOutput();
-			error = process.readAllStandardError();
+			return process.readAll();
 		}
 	}
 
-	out = out.trimmed();
-	error = error.trimmed();
-
-	if (out.isEmpty() ||
-		!error.isEmpty() ||
-		!success ||
-		process.exitCode() != 0)
-	{
-		throw std::runtime_error(
-			QString("Code: %1\nError: %2")
-				.arg(process.exitCode())
-				.arg(error.isEmpty() ? "Unknown" : error)
-				.toStdString());
-	}
-
-	return out;
+	return "";
 }

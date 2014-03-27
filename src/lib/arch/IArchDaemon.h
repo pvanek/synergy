@@ -16,10 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef IARCHDAEMON_H
+#define IARCHDAEMON_H
 
-#include "common/IInterface.h"
-#include "base/String.h"
+#include "IInterface.h"
+#include "CString.h"
 
 //! Interface for architecture dependent daemonizing
 /*!
@@ -51,13 +52,14 @@ public:
 							const char* description,
 							const char* pathname,
 							const char* commandLine,
-							const char* dependencies) = 0;
+							const char* dependencies,
+							bool allUsers) = 0;
 
 	//! Uninstall daemon
 	/*!
 	Uninstall a daemon.  Throws an \c XArchDaemon on failure.
 	*/
-	virtual void		uninstallDaemon(const char* name) = 0;
+	virtual void		uninstallDaemon(const char* name, bool allUsers) = 0;
 
 	//! Install daemon
 	/*!
@@ -108,13 +110,13 @@ public:
 	may still fail.  This method ignores whether or not the
 	service is already installed.
 	*/
-	virtual bool		canInstallDaemon(const char* name) = 0;
+	virtual bool		canInstallDaemon(const char* name, bool allUsers) = 0;
 
 	//! Check if the daemon is installed
 	/*!
 	Returns true iff the daemon is installed.
 	*/
-	virtual bool		isDaemonInstalled(const char* name) = 0;
+	virtual bool		isDaemonInstalled(const char* name, bool allUsers) = 0;
 
 	//@}
 
@@ -126,3 +128,5 @@ public:
 
 	//@}
 };
+
+#endif

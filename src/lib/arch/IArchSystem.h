@@ -16,10 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef IARCHSYSTEM_H
+#define IARCHSYSTEM_H
 
-#include "common/IInterface.h"
-#include "common/stdstring.h"
+#include "IInterface.h"
+#include "stdstring.h"
 
 //! Interface for architecture dependent system queries
 /*!
@@ -57,3 +58,5 @@ public:
 	virtual void setting(const std::string& valueName, const std::string& valueString) const = 0;
 	//@}
 };
+
+#endif

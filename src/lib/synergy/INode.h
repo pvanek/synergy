@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "common/IInterface.h"
+#include "IInterface.h"
 
 class INode : IInterface {
 	

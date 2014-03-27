@@ -16,11 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef XARCH_H
+#define XARCH_H
 
-#include "common/common.h"
-#include "common/stdstring.h"
-#include "common/stdexcept.h"
+#include "common.h"
+#include "stdstring.h"
 
 //! Generic thread exception
 /*!
@@ -56,17 +56,27 @@ string for that error code.
 class XArchEval {
 public:
 	XArchEval() { }
-	virtual ~XArchEval() _NOEXCEPT { }
-	
-	virtual std::string	eval() const = 0;
+	virtual ~XArchEval() { }
+
+	virtual XArchEval*	clone() const throw() = 0;
+
+	virtual std::string	eval() const throw() = 0;
 };
 
 //! Generic exception architecture dependent library
-class XArch : public std::runtime_error {
+class XArch {
 public:
-	XArch(XArchEval* adopted) : std::runtime_error(adopted->eval()) { delete adopted; }
-	XArch(const std::string& msg) : std::runtime_error(msg) { }
-	virtual ~XArch() _NOEXCEPT { }
+	XArch(XArchEval* adoptedEvaluator) : m_eval(adoptedEvaluator) { }
+	XArch(const std::string& msg) : m_eval(NULL), m_what(msg) { }
+	XArch(const XArch& e) : m_eval(e.m_eval != NULL ? e.m_eval->clone() : NULL),
+							m_what(e.m_what) { }
+	~XArch() { delete m_eval; }
+
+	std::string			what() const throw();
+
+private:
+	XArchEval*			m_eval;
+	mutable std::string	m_what;
 };
 
 // Macro to declare XArch derived types
@@ -159,3 +169,6 @@ XARCH_SUBCLASS(XArchDaemonUninstallFailed, XArchDaemon);
 
 //! Attempted to uninstall a daemon that was not installed
 XARCH_SUBCLASS(XArchDaemonUninstallNotInstalled, XArchDaemonUninstallFailed);
+
+
+#endif

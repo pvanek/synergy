@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/stdpre.h"
+#include "stdpre.h"
 #if HAVE_OSTREAM
 #include <ostream>
 #else
 #include <iostream>
 #endif
-#include "common/stdpost.h"
+#include "stdpost.h"

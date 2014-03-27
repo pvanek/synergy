@@ -14,14 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-set(sources
+set(src
 	synergys.cpp
 )
 
 if (WIN32)
-	file(GLOB arch_headers "MSWindows*.h")
-	file(GLOB arch_sources "MSWindows*.cpp")
-	list(APPEND sources
+	list(APPEND src
+		CMSWindowsServerTaskBarReceiver.cpp
+		CMSWindowsServerTaskBarReceiver.h
 		resource.h
 		synergys.ico
 		synergys.rc
@@ -31,32 +31,34 @@ if (WIN32)
 		tb_wait.ico
 	)
 elseif (APPLE)
-	file(GLOB arch_headers "OSX*.h")
-	file(GLOB arch_sources "OSX*.cpp")
+	list(APPEND src COSXServerTaskBarReceiver.cpp)	
 elseif (UNIX)
-	file(GLOB arch_headers "XWindows*.h")
-	file(GLOB arch_sources "XWindows*.cpp")
+	list(APPEND src CXWindowsServerTaskBarReceiver.cpp)
 endif()
 
-list(APPEND sources ${arch_sources})
-list(APPEND headers ${arch_headers})
-
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
-endif()
-
-include_directories(
-	../
-	../../lib/
+set(inc
+	../../lib/arch
+	../../lib/base
+	../../lib/common
+	../../lib/io
+	../../lib/ipc
+	../../lib/mt
+	../../lib/net
+	../../lib/platform
+	../../lib/synergy
+	../../lib/server
+	../../lib/synwinhk
+	../../lib/synwinxt
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-add_executable(synergys ${sources})
+include_directories(${inc})
+add_executable(synergys ${src})
 target_link_libraries(synergys
 	arch base client common io mt net ipc platform server synergy cryptopp ${libs})
 

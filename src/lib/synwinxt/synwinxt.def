@@ -4,5 +4,4 @@ EXPORTS
 	DllCanUnloadNow		PRIVATE
 	DllRegisterServer	PRIVATE
 	DllUnregisterServer	PRIVATE
-	getDraggingFilename
-	clearDraggingFilename
+	getDraggingFilename	

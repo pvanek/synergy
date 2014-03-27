@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/stdpre.h"
+#include "stdpre.h"
 
 #if HAVE_SSTREAM || !defined(__GNUC__) || (__GNUC__ >= 3)
 
@@ -372,5 +372,5 @@ namespace std
 
 #endif /* not g++ 2.95 and no <sstream> */
 
-#include "common/stdpost.h"
-#include "common/stdistream.h"
+#include "stdpost.h"
+#include "stdistream.h"

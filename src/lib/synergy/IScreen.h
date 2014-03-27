@@ -16,12 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ISCREEN_H
+#define ISCREEN_H
 
-#include "synergy/clipboard_types.h"
-#include "base/Event.h"
-#include "base/EventTypes.h"
-#include "common/IInterface.h"
+#include "IInterface.h"
+#include "ClipboardTypes.h"
+#include "CEvent.h"
+#include "CEventTypes.h"
 
 class IClipboard;
 
@@ -69,3 +70,5 @@ public:
 	
 	//@}
 };
+
+#endif

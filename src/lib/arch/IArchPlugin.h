@@ -20,7 +20,7 @@
 
 #define PLUGINS_DIR "plugins"
 
-#include "common/IInterface.h"
+#include "IInterface.h"
 
 class IEventQueue;
 

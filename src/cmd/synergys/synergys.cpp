@@ -16,17 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/ServerApp.h"
-#include "arch/Arch.h"
-#include "base/Log.h"
-#include "base/EventQueue.h"
+#include "CServerApp.h"
+#include "CLog.h"
+#include "CArch.h"
+#include "CEventQueue.h"
 
 #if WINAPI_MSWINDOWS
-#include "synergys/MSWindowsServerTaskBarReceiver.h"
+#include "CMSWindowsServerTaskBarReceiver.h"
 #elif WINAPI_XWINDOWS
-#include "synergys/XWindowsServerTaskBarReceiver.h"
+#include "CXWindowsServerTaskBarReceiver.h"
 #elif WINAPI_CARBON
-#include "synergys/OSXServerTaskBarReceiver.h"
+#include "COSXServerTaskBarReceiver.h"
 #else
 #error Platform not supported.
 #endif

@@ -30,7 +30,7 @@ ScreenSettingsDialog::ScreenSettingsDialog(QWidget* parent, Screen* pScreen) :
 {
 	setupUi(this);
 
-	QRegExp validScreenName("[a-z0-9\\._-]{,255}", Qt::CaseInsensitive);
+	QRegExp validScreenName("[a-z_][a-z0-9\\._-]{,31}", Qt::CaseInsensitive);
 
 	m_pLineEditName->setText(m_pScreen->name());
 	m_pLineEditName->setValidator(new QRegExpValidator(validScreenName, m_pLineEditName));
@@ -63,10 +63,7 @@ void ScreenSettingsDialog::accept()
 {
 	if (m_pLineEditName->text().isEmpty())
 	{
-		QMessageBox::warning(
-			this, tr("Screen name is empty"),
-			tr("The screen name cannot be empty. "
-			   "Please either fill in a name or cancel the dialog."));
+		QMessageBox::warning(this, tr("Screen name is empty"), tr("The name for a screen can not be empty. Please fill in a name or cancel the dialog."));
 		return;
 	}
 
@@ -75,18 +72,7 @@ void ScreenSettingsDialog::accept()
 	m_pScreen->setName(m_pLineEditName->text());
 
 	for (int i = 0; i < m_pListAliases->count(); i++)
-	{
-		QString alias(m_pListAliases->item(i)->text());
-		if (alias == m_pLineEditName->text())
-		{
-			QMessageBox::warning(
-				this, tr("Screen name matches alias"),
-				tr("The screen name cannot be the same as an alias. "
-				   "Please either remove the alias or change the screen name."));
-			return;
-		}
-		m_pScreen->addAlias(alias);
-	}
+		m_pScreen->addAlias(m_pListAliases->item(i)->text());
 
 	m_pScreen->setModifier(Screen::Shift, m_pComboBoxShift->currentIndex());
 	m_pScreen->setModifier(Screen::Ctrl, m_pComboBoxCtrl->currentIndex());

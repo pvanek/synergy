@@ -16,14 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef IPLATFORMSCREEN_H
+#define IPLATFORMSCREEN_H
 
-#include "synergy/clipboard_types.h"
-#include "synergy/IScreen.h"
-#include "synergy/IPrimaryScreen.h"
-#include "synergy/ISecondaryScreen.h"
-#include "synergy/IKeyState.h"
-#include "synergy/option_types.h"
+#include "IScreen.h"
+#include "IPrimaryScreen.h"
+#include "ISecondaryScreen.h"
+#include "IKeyState.h"
+#include "ClipboardTypes.h"
+#include "OptionTypes.h"
 
 class IClipboard;
 
@@ -188,9 +189,8 @@ public:
 	virtual void		pollPressedKeys(KeyButtonSet& pressedKeys) const = 0;
 
 	virtual CString&	getDraggingFilename() = 0;
-	virtual void		clearDraggingFilename() = 0;
-	virtual bool		isDraggingStarted() = 0;
-	virtual bool		isFakeDraggingStarted() = 0;
+	virtual bool		getDraggingStarted() = 0;
+	virtual bool		getFakeDraggingStarted() = 0;
 
 	virtual void		fakeDraggingFiles(CString str) = 0;
 	virtual const CString&
@@ -223,3 +223,5 @@ protected:
 	*/
 	virtual void		handleSystemEvent(const CEvent& event, void*) = 0;
 };
+
+#endif

@@ -18,8 +18,8 @@
  
 #pragma once
 
-#include "common/IInterface.h"
-#include "synergy/IApp.h"
+#include "IInterface.h"
+#include "IApp.h"
 
 class IAppUtil : public IInterface {
 public:

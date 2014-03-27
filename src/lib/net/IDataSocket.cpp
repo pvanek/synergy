@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "net/IDataSocket.h"
-#include "base/EventQueue.h"
+#include "IDataSocket.h"
+#include "CEventQueue.h"
 
 //
 // IDataSocket

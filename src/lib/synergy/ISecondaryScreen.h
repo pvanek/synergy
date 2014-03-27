@@ -16,12 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ISECONDARYSCREEN_H
+#define ISECONDARYSCREEN_H
 
-#include "synergy/mouse_types.h"
-#include "base/Event.h"
-#include "base/EventTypes.h"
-#include "common/IInterface.h"
+#include "IInterface.h"
+#include "MouseTypes.h"
+#include "CEvent.h"
+#include "CEventTypes.h"
 
 //! Secondary screen interface
 /*!
@@ -59,3 +60,5 @@ public:
 
 	//@}
 };
+
+#endif

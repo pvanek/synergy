@@ -17,14 +17,14 @@
 
 #pragma once
 
+#include <Windows.h>
+
 #if defined(synwinxt_EXPORTS)
 #define CSYNERGYSHELLEXE_API __declspec(dllexport)
 #else
 #define CSYNERGYSHELLEXE_API __declspec(dllimport)
 #endif
 
-typedef void			(*GetDraggingFilenameFunc)(char*);
-typedef void			(*ClearDraggingFilenameFunc)();
+typedef void (*GetDraggingFilename)(CHAR*);
 
-CSYNERGYSHELLEXE_API void getDraggingFilename(char* filename);
-CSYNERGYSHELLEXE_API void clearDraggingFilename();
+CSYNERGYSHELLEXE_API void getDraggingFilename(char*);

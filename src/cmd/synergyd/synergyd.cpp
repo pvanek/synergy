@@ -16,8 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/DaemonApp.h"
-
+#include "CDaemonApp.h"
 #include <iostream>
 
 #ifdef SYSAPI_UNIX

@@ -14,14 +14,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+set(inc
+	winmmjoy.h
+)
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
-endif()
+set(src
+	winmmjoy.cpp
+	${inc}
+)
 
-add_library(winmmjoy SHARED ${sources})
+add_library(winmmjoy SHARED ${inc} ${src})
 
 add_custom_command(
 	TARGET winmmjoy 

@@ -17,11 +17,11 @@
 # Version number for Synergy
 set(VERSION_MAJOR 1)
 set(VERSION_MINOR 4)
-set(VERSION_REV 18)
+set(VERSION_REV 16)
 set(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REV}")
 
-# 2.8 needed for file glob.
-cmake_minimum_required(VERSION 2.8)
+# The check for 2.6 may be too strict (consider lowering).
+cmake_minimum_required(VERSION 2.4.7)
 
 # CMake complains if we don't have this.
 if (COMMAND cmake_policy)
@@ -46,10 +46,10 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 # for unix, put debug files in a separate bin "debug" dir.
 # release bin files should stay in the root of the bin dir.
 if (CMAKE_GENERATOR STREQUAL "Unix Makefiles")
-	if (CMAKE_BUILD_TYPE STREQUAL Debug)
-		set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin/debug)
-		set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib/debug)
-	endif()
+  if (CMAKE_BUILD_TYPE STREQUAL Debug)
+    set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin/debug)
+    set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib/debug)
+  endif()
 endif()
 
 # Set some easy to type variables.
@@ -64,20 +64,8 @@ set(doc_dir ${root_dir}/doc)
 # lib, it is automatically passed to the linker.
 set(libs)
 
-# only include headers as "source" if not unix makefiles,
-# which is useful when using an IDE.
-if (${CMAKE_GENERATOR} STREQUAL "Unix Makefiles")
-	set(SYNERGY_ADD_HEADERS FALSE)
-else()
-	set(SYNERGY_ADD_HEADERS TRUE)
-endif()
-
 # Depending on the platform, pass in the required defines.
 if (UNIX)
-
-	# warnings as errors:
-	# we have a problem with people checking in code with warnings.
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 
 	# For config.h, detect the libraries, functions, etc.
 	include(CheckIncludeFiles)
@@ -260,12 +248,12 @@ if (UNIX)
 		if (HAVE_Xrandr)
 			list(APPEND libs Xrandr)
 		endif()
-		
-		# this was outside of the linux scope,
-		# not sure why, moving it back inside.
-		if(HAVE_Xi)
-			list(APPEND libs Xi)
-		endif()
+    
+    # this was outside of the linux scope,
+    # not sure why, moving it back inside.
+    if(HAVE_Xi)
+      list(APPEND libs Xi)
+    endif()
 
 	endif()
 
@@ -298,7 +286,7 @@ if (UNIX)
 
 else() # not-unix
 
-	list(APPEND libs Wtsapi32 Userenv Wininet comsuppw Shlwapi)
+	list(APPEND libs Wtsapi32 Userenv Wininet comsuppw)
 
 	add_definitions(
 		/DWIN32
@@ -317,35 +305,42 @@ else() # not-unix
 endif()
 
 add_subdirectory(src)
-add_subdirectory(ext)
+add_subdirectory(tools)
 
 if (WIN32)
-	# TODO:	consider using /analyze to uncover potential bugs in the source code.
+	# add /analyze in order to unconver potential bugs in the source code
+	# Details: http://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx
+	# add /FR to generate browse information (ncb files) usefull for using IDE
 
-	# /WX - warnings as errors (we have a problem with people checking in code with warnings).
-	# /FR - generate browse information (ncb files) useful for using IDE.
-	# /MP - use multi cores to compile.
-	# /D _BIND_TO_CURRENT_VCLIBS_VERSION - TODO: explain why.
-	# /D _SECURE_SCL=1 - find bugs with iterators.
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX /FR /MP /D _BIND_TO_CURRENT_VCLIBS_VERSION=1 /D _SECURE_SCL=1")
+	#define _BIND_TO_CURRENT_CRT_VERSION 1
+	#define _BIND_TO_CURRENT_ATL_VERSION 1
+	#define _BIND_TO_CURRENT_MFC_VERSION 1
+	#define _BIND_TO_CURRENT_OPENMP_VERSION 1
+	# next line replaced the previous 4 ones:
+	#define _BIND_TO_CURRENT_VCLIBS_VERSION 1;
+
+	# compiler: /MP - use multi cores to compile
+	# added _SECURE_SCL=1 for finding bugs with iterators - http://msdn.microsoft.com/en-us/library/aa985965.aspx
 	
-	# /MD - use multi-core libraries.
-	# /O2 - get the fastest code.
-	# /Ob2 - expand inline functions (auto-inlining).
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /O2 /Ob2")
+	# common args between all vs builds
+	set(VS_ARGS "/FR /MP /D _BIND_TO_CURRENT_VCLIBS_VERSION=1 /D _SECURE_SCL=1 ${VS_ARGS_EXTRA}")
+	
+	# we may use `cmake -D VS_ARGS_EXTRA="/analyze"` for example to specify
+	# analyze mode (since we don't always want to use it; e.g. on non-team 
+	# or non-x86 compiler editions where there's no support)
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${VS_ARGS}")
+	set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${VS_ARGS}")
 
-endif()
+	# this line removes "/D NDEBUG" from release, we want them in order to
+	# find bugs even on release builds.
+	set(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2")
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "IRIX")
-	set_target_properties(synergys PROPERTIES LINK_FLAGS "-all -woff 33 -woff 84 -woff 15")
-	set_target_properties(synergyc PROPERTIES LINK_FLAGS "-all -woff 33 -woff 84 -woff 15")
-	set_target_properties(synergyd PROPERTIES LINK_FLAGS "-all -woff 33 -woff 84 -woff 15")
 endif()
 
 if (CONF_CPACK)
 
 	if (WIN32)
-		message(FATAL_ERROR "CPack support for Windows has been removed.")
+	   message(FATAL_ERROR "CPack support for Windows has been removed.")
 	endif()
 
 	if (UNIX)
@@ -396,3 +391,10 @@ if (CONF_DOXYGEN)
 	configure_file(${cmake_dir}/doxygen.cfg.in ${doc_dir}/doxygen.cfg)
 
 endif()
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "IRIX")
+	set_target_properties(synergys PROPERTIES LINK_FLAGS "-all -woff 33 -woff 84 -woff 15")
+	set_target_properties(synergyc PROPERTIES LINK_FLAGS "-all -woff 33 -woff 84 -woff 15")
+	set_target_properties(synergyd PROPERTIES LINK_FLAGS "-all -woff 33 -woff 84 -woff 15")
+endif()
+

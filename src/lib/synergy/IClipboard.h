@@ -16,11 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ICLIPBOARD_H
+#define ICLIPBOARD_H
 
-#include "base/String.h"
-#include "base/EventTypes.h"
-#include "common/IInterface.h"
+#include "IInterface.h"
+#include "CString.h"
+#include "BasicTypes.h"
 
 //! Clipboard interface
 /*!
@@ -167,3 +168,5 @@ private:
 	static UInt32		readUInt32(const char*);
 	static void			writeUInt32(CString*, UInt32);
 };
+
+#endif

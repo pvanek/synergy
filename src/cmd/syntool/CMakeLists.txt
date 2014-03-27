@@ -13,21 +13,32 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+set(src
+	syntool.cpp
+)
 
-include_directories(
-	../
-	../../lib/
+set(inc
+	../../lib/arch
+	../../lib/base
+	../../lib/common
+	../../lib/io
+	../../lib/ipc
+	../../lib/mt
+	../../lib/net
+	../../lib/platform
+	../../lib/synergy
+	../../lib/synwinhk
+	../../lib/synwinxt
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-add_executable(syntool ${sources})
+include_directories(${inc})
+add_executable(syntool ${src})
 target_link_libraries(syntool
 	synergy arch base client common io ipc mt net platform server cryptopp ${libs})
 

@@ -16,7 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef CMETHODJOB_H
+#define CMETHODJOB_H
 
 #include "IJob.h"
 
@@ -66,3 +67,5 @@ TMethodJob<T>::run()
 		(m_object->*m_method)(m_arg);
 	}
 }
+
+#endif

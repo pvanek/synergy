@@ -16,13 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "common/stdpre.h"
+#include "stdpre.h"
 #if HAVE_ISTREAM
 #include <istream>
 #else
 #include <iostream>
 #endif
-#include "common/stdpost.h"
+#include "stdpost.h"
 
 #if defined(_MSC_VER) && _MSC_VER <= 1200
 // VC++6 istream has no overloads for __int* types, .NET does

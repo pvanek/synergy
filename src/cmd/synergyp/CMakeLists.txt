@@ -14,14 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-set(sources
+set(src
 	synergyp.cpp
 )
 
 if (WIN32)
-	file(GLOB arch_headers "MSWindows*.h")
-	file(GLOB arch_sources "MSWindows*.cpp")
-	list(APPEND sources
+	list(APPEND src
+		CMSWindowsPortableTaskBarReceiver.cpp
+		CMSWindowsPortableTaskBarReceiver.h
 		resource.h
 		synergyp.ico
 		synergyp.rc
@@ -31,35 +31,38 @@ if (WIN32)
 		tb_wait.ico
 	)
 elseif (APPLE)
-	file(GLOB arch_headers "OSX*.h")
-	file(GLOB arch_sources "OSX*.cpp")
+	list(APPEND src COSXPortableTaskBarReceiver.cpp)	
 elseif (UNIX)
-	file(GLOB arch_headers "XWindows*.h")
-	file(GLOB arch_sources "XWindows*.cpp")
+	list(APPEND src CXWindowsPortableTaskBarReceiver.cpp)
 endif()
 
-list(APPEND sources ${arch_sources})
-list(APPEND headers ${arch_headers})
-
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
-endif()
-
-include_directories(
-	../
-	../../lib/
+set(inc
+	../../lib/arch
+	../../lib/base
+	../../lib/common
+	../../lib/io
+	../../lib/ipc
+	../../lib/mt
+	../../lib/net
+	../../lib/platform
+	../../lib/synergy
+	../../lib/server
+	../../lib/synwinhk
+	../../lib/synwinxt
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
+include_directories(${inc})
+
 if (WIN32)
-	add_executable(synergyp WIN32 ${sources})
+	add_executable(synergyp WIN32 ${src})
 else()
-	add_executable(synergyp ${sources})
+	add_executable(synergyp ${src})
 endif()	
 	
 target_link_libraries(synergyp

@@ -16,12 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ISTREAM_H
+#define ISTREAM_H
 
-#include "common/IInterface.h"
-#include "base/Event.h"
-#include "base/IEventQueue.h"
-#include "base/EventTypes.h"
+#include "IInterface.h"
+#include "CEvent.h"
+#include "IEventQueue.h"
+#include "CEventTypes.h"
 
 class IEventQueue;
 
@@ -33,7 +34,7 @@ Defines the interface for all streams.
 */
 class IStream : public IInterface {
 public:
-	IStream() { }
+	IStream(IEventQueue* events) : m_events(events) { }
 
 	//! @name manipulators
 	//@{
@@ -115,6 +116,11 @@ public:
 	virtual UInt32		getSize() const = 0;
 
 	//@}
+
+private:
+	IEventQueue*		m_events;
 };
 
 }
+
+#endif

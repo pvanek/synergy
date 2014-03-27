@@ -15,24 +15,24 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/ServerApp.h"
-#include "synergy/ClientApp.h"
-#include "arch/Arch.h"
-#include "base/Log.h"
-#include "base/EventQueue.h"
+#define WIN32_LEAN_AND_MEAN
+
+#include "Windows.h"
+#include "CServerApp.h"
+#include "CClientApp.h"
+#include "CLog.h"
+#include "CArch.h"
+#include "CEventQueue.h"
 
 #if WINAPI_MSWINDOWS
-#include "MSWindowsPortableTaskBarReceiver.h"
+#include "CMSWindowsPortableTaskBarReceiver.h"
 #elif WINAPI_XWINDOWS
-#include "XWindowsPortableTaskBarReceiver.h"
+#include "CXWindowsPortableTaskBarReceiver.h"
 #elif WINAPI_CARBON
-#include "OSXPortableTaskBarReceiver.h"
+#include "COSXPortableTaskBarReceiver.h"
 #else
 #error Platform not supported.
 #endif
-
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 
 INT WINAPI
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)

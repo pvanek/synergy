@@ -14,21 +14,39 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+set(inc
+	CCondVar.h
+	CLock.h
+	CMutex.h
+	CThread.h
+	XMT.h
+	XThread.h
+)
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
+set(src
+	CCondVar.cpp
+	CLock.cpp
+	CMutex.cpp
+	CThread.cpp
+	XMT.cpp
+)
+
+if (WIN32)
+	list(APPEND src ${inc})
 endif()
 
-include_directories(
-	../
+set(inc
+	../arch
+	../base
+	../common
+	../synergy
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-add_library(mt STATIC ${sources})
+include_directories(${inc})
+add_library(mt STATIC ${src})

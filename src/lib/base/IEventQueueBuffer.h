@@ -16,10 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef IEVENTQUEUEBUFFER_H
+#define IEVENTQUEUEBUFFER_H
 
-#include "common/IInterface.h"
-#include "common/basic_types.h"
+#include "IInterface.h"
+#include "BasicTypes.h"
 
 class CEvent;
 class CEventQueueTimer;
@@ -99,3 +100,5 @@ public:
 
 	//@}
 };
+
+#endif

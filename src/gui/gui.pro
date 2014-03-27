@@ -69,18 +69,17 @@ HEADERS += src/MainWindow.h \
     src/Ipc.h \
     src/SynergyLocale.h \
     src/QUtility.h \
-    src/PremiumAuth.h 
+    src/PremiumAuth.h
 RESOURCES += res/Synergy.qrc
 RC_FILE = res/win/Synergy.rc
-macx {
-	HEADERS += src/AXDatabaseCleaner.h
-	OBJECTIVE_SOURCES += src/AXDatabaseCleaner.mm
+macx { 
 	QMAKE_INFO_PLIST = res/mac/Info.plist
     TARGET = Synergy
     QSYNERGY_ICON.files = res/mac/Synergy.icns
     QSYNERGY_ICON.path = Contents/Resources
     QMAKE_BUNDLE_DATA += QSYNERGY_ICON
-    LIBS += $$MACX_LIBS
+    LIBS += -framework \
+        ApplicationServices
 }
 debug { 
     OBJECTS_DIR = tmp/debug

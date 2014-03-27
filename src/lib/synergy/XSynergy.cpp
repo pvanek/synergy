@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/XSynergy.h"
-#include "base/String.h"
+#include "XSynergy.h"
+#include "CStringUtil.h"
 
 //
 // XBadClient
@@ -57,8 +57,8 @@ CString
 XIncompatibleClient::getWhat() const throw()
 {
 	return format("XIncompatibleClient", "incompatible client %{1}.%{2}",
-								synergy::string::sprintf("%d", m_major).c_str(),
-								synergy::string::sprintf("%d", m_minor).c_str());
+								CStringUtil::print("%d", m_major).c_str(),
+								CStringUtil::print("%d", m_minor).c_str());
 }
 
 
@@ -129,5 +129,5 @@ XExitApp::getWhat() const throw()
 {
 	return format(
 		"XExitApp", "exiting with code %{1}", 
-		synergy::string::sprintf("%d", m_code).c_str());
+		CStringUtil::print("%d", m_code).c_str());
 }

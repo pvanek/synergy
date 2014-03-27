@@ -16,10 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ILISTENSOCKET_H
+#define ILISTENSOCKET_H
 
-#include "net/ISocket.h"
-#include "base/EventTypes.h"
+#include "ISocket.h"
+#include "CEventTypes.h"
 
 class IDataSocket;
 
@@ -48,3 +49,5 @@ public:
 	virtual void		close() = 0;
 	virtual void*		getEventTarget() const = 0;
 };
+
+#endif

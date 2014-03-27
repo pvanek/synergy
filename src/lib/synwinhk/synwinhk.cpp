@@ -16,10 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synwinhk/synwinhk.h"
-
-#include "synergy/protocol_types.h"
-
+#include "synwinhk.h"
+#include "ProtocolTypes.h"
 #include <zmouse.h>
 #include <tchar.h>
  

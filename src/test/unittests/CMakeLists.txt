@@ -14,39 +14,55 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB_RECURSE headers "*.h")
-file(GLOB_RECURSE sources "*.cpp")
+set(h
+	synergy/CKeyStateTests.h
+	synergy/CMockEventQueue.h
+	synergy/CMockKeyMap.h
+	client/CMockClient.h
+	io/CMockStream.h
+	server/CMockServer.h
+	io/CMockCryptoStream.h
+	synergy/CMockScreen.h
+	server/CMockConfig.h
+	server/CMockPrimaryClient.h
+	server/CMockInputFilter.h
+)
 
-file(GLOB_RECURSE global_headers "../../test/global/*.h")
-file(GLOB_RECURSE global_sources "../../test/global/*.cpp")
+set(src
+	${h}
+	Main.cpp
+	synergy/CClipboardTests.cpp
+	synergy/CKeyStateTests.cpp
+	client/CServerProxyTests.cpp
+	synergy/CCryptoStreamTests.cpp
+	server/CClientProxyTests.cpp
+)
 
-list(APPEND headers ${global_headers})
-list(APPEND sources ${global_sources})
-
-file(GLOB_RECURSE mock_headers "../../test/mock/*.h")
-file(GLOB_RECURSE mock_sources "../../test/mock/*.cpp")
-
-list(APPEND headers ${mock_headers})
-list(APPEND sources ${mock_sources})
-
-include_directories(
-	../../
-	../../lib/
-	../../../ext/gtest-1.6.0/include
-	../../../ext/gmock-1.6.0/include
-	../../../ext
+set(inc
+	../../lib/arch
+	../../lib/base
+	../../lib/client
+	../../lib/server
+	../../lib/common
+	../../lib/io
+	../../lib/mt
+	../../lib/net
+	../../lib/platform
+	../../lib/synergy
+	../../../tools/gtest-1.6.0/include
+	../../../tools/gmock-1.6.0/include
+	../../../tools
+	io
+	synergy
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
-endif()
-
-add_executable(unittests ${sources})
+include_directories(${inc})
+add_executable(unittests ${src})
 target_link_libraries(unittests
 	arch base client server common io net platform server synergy mt gtest gmock cryptopp ${libs})

@@ -16,11 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#ifndef ISOCKET_H
+#define ISOCKET_H
 
-#include "common/IInterface.h"
-#include "base/Event.h"
-#include "base/EventTypes.h"
+#include "IInterface.h"
+#include "CEvent.h"
+#include "CEventTypes.h"
 
 class CNetworkAddress;
 
@@ -58,3 +59,5 @@ public:
 
 	//@}
 };
+
+#endif

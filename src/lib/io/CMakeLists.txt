@@ -14,25 +14,47 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-file(GLOB headers "*.h")
-file(GLOB sources "*.cpp")
+set(inc
+	CStreamBuffer.h
+	CStreamFilter.h
+	IStream.h
+	IStreamFilterFactory.h
+	XIO.h
+	CCryptoStream.h
+	CCryptoMode.h
+	ECryptoMode.h
+	CCryptoOptions.h
+)
 
-if (SYNERGY_ADD_HEADERS)
-	list(APPEND sources ${headers})
+set(src
+	CStreamBuffer.cpp
+	CStreamFilter.cpp
+	XIO.cpp
+	CCryptoStream.cpp
+	CCryptoMode.cpp
+	CCryptoOptions.cpp
+)
+
+if (WIN32)
+	list(APPEND src ${inc})
 endif()
 
-include_directories(
-	../
-	../../../ext
+set(inc
+	../arch
+	../base
+	../common
+	../..
+	../../../tools
 )
 
 if (UNIX)
-	include_directories(
+	list(APPEND inc
 		../../..
 	)
 endif()
 
-add_library(io STATIC ${sources})
+include_directories(${inc})
+add_library(io STATIC ${src})
 
 if (UNIX)
 	target_link_libraries(io cryptopp)

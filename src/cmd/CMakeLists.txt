@@ -23,7 +23,3 @@ add_subdirectory(syntool)
 if (WIN32)
   add_subdirectory(synergyp)
 endif()
-
-if (APPLE)
-	add_subdirectory(synmacph)
-endif()

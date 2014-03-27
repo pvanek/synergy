@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "synergy/XScreen.h"
+#include "XScreen.h"
 
 //
 // XScreenOpenFailure
@@ -50,7 +50,7 @@ XScreenUnavailable::XScreenUnavailable(double timeUntilRetry) :
 	// do nothing
 }
 
-XScreenUnavailable::~XScreenUnavailable() _NOEXCEPT
+XScreenUnavailable::~XScreenUnavailable()
 {
 	// do nothing
 }
